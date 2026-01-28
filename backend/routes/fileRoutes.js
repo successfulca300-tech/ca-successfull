@@ -1,0 +1,13 @@
+import express from 'express';
+import { proxyFileView, generateFileViewToken } from '../controllers/fileViewController.js';
+import { protect } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// Proxy view by token (public token used in URL)
+router.get('/view/:token', proxyFileView);
+
+// Generate a short-lived view token for a file (restricted)
+router.post('/token', protect, generateFileViewToken);
+
+export default router;

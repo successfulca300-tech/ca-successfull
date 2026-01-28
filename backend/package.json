@@ -1,0 +1,41 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend API for users and resources management",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node scripts/seedUsers.js",
+    "create-admin": "node scripts/createAdmin.js"
+  },
+  "keywords": [
+    "node",
+    "express",
+    "mongodb",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-fileupload": "^1.5.2",
+    "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^7.0.0",
+    "mongoose": "^8.0.3",
+    "multer": "^1.4.4-lts.1",
+    "node-appwrite": "^10.0.1",
+    "nodemailer": "^7.0.11",
+    "razorpay": "^2.0.6",
+    "sib-api-v3-sdk": "^8.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
+

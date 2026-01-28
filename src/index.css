@@ -1,0 +1,183 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 215 50% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 50% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 50% 15%;
+
+    --primary: 215 70% 25%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 30% 94%;
+    --secondary-foreground: 215 70% 25%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 25% 40%;
+
+    --accent: 213 16% 51%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 25% 88%;
+    --input: 215 25% 88%;
+    --ring: 215 70% 25%;
+
+    --radius: 0.5rem;
+
+    /* Custom colors */
+    --navy: 215 70% 20%;
+    --navy-light: 215 60% 35%;
+    --blue: 210 100% 50%;
+    --blue-light: 210 100% 95%;
+    --slate: 213 16% 51%;
+    --slate-dark: 213 20% 40%;
+    --green: 145 70% 40%;
+    --cream: 40 30% 96%;
+    --success: 145 60% 45%;
+  }
+
+  .dark {
+    --background: 215 50% 10%;
+    --foreground: 210 40% 98%;
+
+    --card: 215 50% 12%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 215 50% 12%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 213 30% 60%;
+    --primary-foreground: 215 50% 15%;
+
+    --secondary: 215 40% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 215 40% 20%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 213 16% 51%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 215 40% 25%;
+    --input: 215 40% 25%;
+    --ring: 213 30% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Poppins', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold text-foreground;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-primary-foreground font-semibold px-6 py-3 rounded-md hover:bg-navy-light transition-all duration-300 shadow-md hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply bg-accent text-accent-foreground font-medium px-6 py-3 rounded-md hover:bg-slate-dark transition-all duration-300;
+  }
+
+  .btn-outline {
+    @apply border-2 border-primary text-primary font-medium px-6 py-3 rounded-md hover:bg-primary hover:text-primary-foreground transition-all duration-300;
+  }
+
+  .nav-link {
+    @apply text-foreground hover:text-primary transition-colors duration-200 font-medium;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-foreground relative inline-block;
+  }
+
+  .section-title::after {
+    content: '';
+    @apply absolute bottom-0 left-0 w-16 h-1 bg-primary rounded-full;
+  }
+
+  .course-card {
+    @apply bg-card rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-border;
+  }
+
+  .stat-card {
+    @apply text-center;
+  }
+
+  .stat-number {
+    @apply text-3xl md:text-4xl font-bold text-primary;
+  }
+
+  .stat-label {
+    @apply text-muted-foreground text-sm mt-1;
+  }
+
+  .dropdown-content {
+    @apply absolute top-full left-0 bg-card shadow-xl rounded-lg py-2 min-w-[200px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-border;
+  }
+
+  .dropdown-item {
+    @apply px-4 py-2 hover:bg-secondary transition-colors cursor-pointer block text-sm text-foreground;
+  }
+
+  .offer-banner {
+    @apply bg-primary text-primary-foreground py-2 text-center text-sm;
+  }
+
+  .badge-featured {
+    @apply bg-accent text-accent-foreground text-xs font-semibold px-2 py-1 rounded;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: fadeUp 0.6s ease-out forwards;
+  }
+
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-count {
+    animation: countUp 1s ease-out forwards;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-navy-light;
+  }
+}
