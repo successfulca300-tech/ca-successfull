@@ -11,8 +11,8 @@ COPY backend/ ./backend/
 
 WORKDIR /app/backend
 
-# Install dependencies
-RUN npm ci --only=production
+# Clear npm cache and install dependencies
+RUN npm cache clean --force && npm ci --only=production
 
 # Expose port
 EXPOSE 5000
