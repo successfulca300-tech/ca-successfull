@@ -11,7 +11,7 @@ const testSeriesMediaSchema = new mongoose.Schema(
     mediaType: {
       type: String,
       required: true,
-      enum: ['thumbnail', 'video'],
+      enum: ['thumbnail', 'video', 'image', 'pdf', 'document'],
     },
     fileId: {
       type: String,

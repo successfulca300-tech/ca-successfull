@@ -1,6 +1,7 @@
 import { Client, Storage, InputFile } from 'node-appwrite';
 import fs from 'fs';
 import path from 'path';
+import mongoose from 'mongoose';
 import TestSeries from '../models/TestSeries.js';
 import TestSeriesMedia from '../models/TestSeriesMedia.js';
 
@@ -166,31 +167,37 @@ export const uploadTestSeriesMedia = async (req, res) => {
     // If testSeriesId is provided, update TestSeries document
     if (testSeriesId) {
       try {
-        let testSeries = await TestSeries.findById(testSeriesId);
-        if (!testSeries) {
-          // If not found, create a new TestSeries document with the provided _id
-          // This assumes testSeriesId is a valid identifier like 's1', 's2', etc.
-          testSeries = new TestSeries({
-            _id: testSeriesId,
-            title: `Test Series ${testSeriesId.toUpperCase()}`, // Default title
-            category: null, // Will need to be set later
-            createdBy: req.user._id,
-          });
+        // testSeriesId might be 's1', 's2', etc. - convert to valid format if needed
+        // Check if it's already a valid ObjectId
+        let query = {};
+        if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+          query._id = testSeriesId;
+        } else {
+          // Otherwise search by seriesType (S1, S2, S3, S4)
+          const seriesTypeMap = { 's1': 'S1', 's2': 'S2', 's3': 'S3', 's4': 'S4' };
+          query.seriesType = seriesTypeMap[testSeriesId.toLowerCase()] || testSeriesId;
         }
 
-        // Check if user has permission (creator or admin)
-        if (testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-          console.warn('User does not have permission to update test series');
+        let testSeries = await TestSeries.findOne(query);
+        
+        // Don't try to create with invalid _id - just log and continue
+        if (!testSeries) {
+          console.warn(`TestSeries not found with query:`, query);
         } else {
-          if (mediaType === 'video') {
-            testSeries.videoUrl = fileUrl;
-            testSeries.videoFileId = response.$id;
-            testSeries.videoType = 'UPLOAD';
-          } else if (mediaType === 'image') {
-            testSeries.thumbnail = fileUrl;
+          // Check if user has permission (creator or admin)
+          if (testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+            console.warn('User does not have permission to update test series');
+          } else {
+            if (mediaType === 'video') {
+              testSeries.videoUrl = fileUrl;
+              testSeries.videoFileId = response.$id;
+              testSeries.videoType = 'UPLOAD';
+            } else if (mediaType === 'image') {
+              testSeries.thumbnail = fileUrl;
+            }
+            await testSeries.save();
           }
         }
-        await testSeries.save();
       } catch (dbError) {
         console.error('Error updating test series:', dbError);
         // Don't fail the upload if DB update fails
