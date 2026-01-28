@@ -31,30 +31,17 @@ import testSeriesAnswerRoutes from './routes/testSeriesAnswerRoutes.js';
 // Load env
 dotenv.config();
 
-// Create Express app first (before calling startServer)
+// Create Express app
 const app = express();
 
-// DB connect will be performed before starting the HTTP server
-
-// Start server only after DB connection succeeds. This makes deployment on
-// platforms like Railway more predictable (so we don't start a server that
-// immediately exits due to DB errors).
-const startServer = async () => {
-  try {
-    await connectDB();
-    const PORT = process.env.PORT || 5000;
-    const HOST = process.env.HOST || '0.0.0.0';
-    app.listen(PORT, HOST, () => {
-      console.log(`🚀 Server running on ${HOST}:${PORT}`);
-    });
-  } catch (err) {
-    console.error('Failed to start server due to DB connection error:', err.message || err);
-    // Exit so the container/service manager knows the start failed
-    process.exit(1);
-  }
-};
-
-startServer();
+// Connect to DB in background (don't block server startup)
+console.log('Attempting to connect to MongoDB...');
+connectDB()
+  .then(() => console.log('✅ MongoDB connection established'))
+  .catch(err => {
+    console.error('❌ MongoDB connection failed. Server will still run but DB operations will fail.');
+    console.error('Error:', err.message);
+  });
 
 // Simple request logger for debugging route issues in deployments
 app.use((req, res, next) => {
@@ -204,6 +191,12 @@ app.use((err, req, res, next) => {
 });
 
 /* ===============================
-  Server Start
+   Server Start
 ================================ */
-// Started in `startServer()` above after DB connect.
+const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+  console.log(`📍 Health check: http://${HOST}:${PORT}/api/health`);
+});
