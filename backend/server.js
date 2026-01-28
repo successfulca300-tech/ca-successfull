@@ -31,8 +31,27 @@ import testSeriesAnswerRoutes from './routes/testSeriesAnswerRoutes.js';
 // Load env
 dotenv.config();
 
-// DB connect
-connectDB();
+// DB connect will be performed before starting the HTTP server
+
+// Start server only after DB connection succeeds. This makes deployment on
+// platforms like Railway more predictable (so we don't start a server that
+// immediately exits due to DB errors).
+const startServer = async () => {
+  try {
+    await connectDB();
+    const PORT = process.env.PORT || 5000;
+    const HOST = process.env.HOST || '0.0.0.0';
+    app.listen(PORT, HOST, () => {
+      console.log(`🚀 Server running on ${HOST}:${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to start server due to DB connection error:', err.message || err);
+    // Exit so the container/service manager knows the start failed
+    process.exit(1);
+  }
+};
+
+startServer();
 
 const app = express();
 
@@ -184,10 +203,6 @@ app.use((err, req, res, next) => {
 });
 
 /* ===============================
-   Server Start
+  Server Start
 ================================ */
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+// Started in `startServer()` above after DB connect.
