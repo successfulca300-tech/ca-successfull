@@ -31,6 +31,9 @@ import testSeriesAnswerRoutes from './routes/testSeriesAnswerRoutes.js';
 // Load env
 dotenv.config();
 
+// Create Express app first (before calling startServer)
+const app = express();
+
 // DB connect will be performed before starting the HTTP server
 
 // Start server only after DB connection succeeds. This makes deployment on
@@ -52,8 +55,6 @@ const startServer = async () => {
 };
 
 startServer();
-
-const app = express();
 
 // Simple request logger for debugging route issues in deployments
 app.use((req, res, next) => {
