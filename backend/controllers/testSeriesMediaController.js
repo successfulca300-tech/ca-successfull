@@ -139,6 +139,18 @@ export const uploadTestSeriesMedia = async (req, res) => {
         });
 
         if (existingMedia) {
+          // Ensure we don't violate the unique index on (testSeriesId, mediaType, status)
+          // by deleting any existing archived record for this series/type before archiving.
+          try {
+            const existingArchived = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'archived' });
+            if (existingArchived) {
+              console.log(`Found existing archived media (will delete) for series=${testSeriesId} type=${mediaType} id=${existingArchived._id}`);
+              await TestSeriesMedia.deleteOne({ _id: existingArchived._id });
+            }
+          } catch (err) {
+            console.warn('Warning: could not clear previous archived media', err.message || err);
+          }
+
           existingMedia.status = 'archived';
           existingMedia.previousFileId = existingMedia.fileId;
           await existingMedia.save();
@@ -161,6 +173,41 @@ export const uploadTestSeriesMedia = async (req, res) => {
       }
     } catch (dbError) {
       console.error('Error saving media metadata to MongoDB:', dbError);
+
+      // If duplicate key error due to archived uniqueness, try to clear the conflicting archived document and retry once
+      if (dbError && (dbError.code === 11000 || (dbError.errorResponse && dbError.errorResponse.code === 11000))) {
+        try {
+          const keyValue = (dbError.errorResponse && dbError.errorResponse.keyValue) || {};
+          const conflictQuery = {
+            testSeriesId: keyValue.testSeriesId || testSeriesId,
+            mediaType: keyValue.mediaType || mediaType,
+            status: keyValue.status || 'archived'
+          };
+          console.warn('Duplicate-key conflict detected. Attempting to remove conflicting document matching:', conflictQuery);
+          await TestSeriesMedia.deleteMany(conflictQuery);
+
+          // Retry saving new media once
+          try {
+            await new TestSeriesMedia({
+              testSeriesId,
+              mediaType,
+              fileId: response.$id,
+              fileUrl,
+              fileName: originalname,
+              fileSize: size,
+              mimeType: mimetype,
+              uploadedBy: req.user._id,
+              status: 'active',
+            }).save();
+            console.log('Retry successful: media metadata saved after resolving duplicate-key conflict');
+          } catch (retryErr) {
+            console.error('Retry failed for saving media metadata:', retryErr);
+          }
+        } catch (cleanupErr) {
+          console.error('Failed to cleanup conflicting archived documents:', cleanupErr);
+        }
+      }
+
       // Don't fail the upload if DB save fails, but log the error
     }
 
