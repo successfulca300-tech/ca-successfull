@@ -128,29 +128,26 @@ export const uploadTestSeriesMedia = async (req, res) => {
     const endpointWithV1 = baseEndpoint.endsWith('/v1') ? baseEndpoint : `${baseEndpoint}/v1`;
     const fileUrl = `${endpointWithV1}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${response.$id}/view?project=${APPWRITE_PROJECT_ID}`;
 
-    // Save metadata to MongoDB using an atomic transaction to avoid unique-index races
+    // Save metadata to MongoDB using a transaction to avoid races/duplicate-key errors
     try {
       if (testSeriesId) {
-        // Start a mongoose session for transaction
-        let session = null;
+        const session = await mongoose.startSession();
         try {
-          session = await mongoose.startSession();
           session.startTransaction();
 
-          // Remove any already-archived document for this series/type to ensure uniqueness
-          await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' }, { session });
+          // Remove any already-archived documents for this series/type (cleanup)
+          await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' }).session(session);
 
-          // Archive existing active doc (if any) atomically
-          const existingActiveDoc = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'active' }).session(session);
-          if (existingActiveDoc) {
-            await TestSeriesMedia.updateOne(
-              { _id: existingActiveDoc._id },
-              { $set: { status: 'archived', previousFileId: existingActiveDoc.fileId } },
-              { session }
-            );
+          // Archive the currently active media atomically (if exists)
+          const existingActive = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'active' }).session(session);
+          if (existingActive) {
+            existingActive.status = 'archived';
+            existingActive.previousFileId = existingActive.fileId;
+            await existingActive.save({ session });
+            console.log(`Archived existing media id=${existingActive._id} for series=${testSeriesId} type=${mediaType}`);
           }
 
-          // Create new media document within the same transaction
+          // Insert the new media document
           const newMedia = new TestSeriesMedia({
             testSeriesId,
             mediaType,
@@ -166,55 +163,39 @@ export const uploadTestSeriesMedia = async (req, res) => {
           await newMedia.save({ session });
 
           await session.commitTransaction();
-          session.endSession();
-        } catch (txnErr) {
-          if (session) {
+          console.log('Media metadata saved in transaction, newMediaId=', newMedia._id);
+        } catch (txErr) {
+          await session.abortTransaction();
+          console.error('Transaction failed when saving media metadata:', txErr);
+
+          // As a fallback, attempt the previous cleanup+retry approach
+          if (txErr && (txErr.code === 11000 || (txErr.errorResponse && txErr.errorResponse.code === 11000))) {
             try {
-              await session.abortTransaction();
-            } catch (abortErr) {
-              console.error('Failed to abort transaction:', abortErr);
+              await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' });
+              const retryMedia = new TestSeriesMedia({
+                testSeriesId,
+                mediaType,
+                fileId: response.$id,
+                fileUrl,
+                fileName: originalname,
+                fileSize: size,
+                mimeType: mimetype,
+                uploadedBy: req.user._id,
+                status: 'active',
+              });
+              await retryMedia.save();
+              console.log('Fallback retry successful after transaction failure');
+            } catch (retryErr) {
+              console.error('Fallback retry also failed:', retryErr);
             }
-            session.endSession();
           }
-
-          // If transactions are not supported or transaction failed, fallback to cleanup+retry approach
-          console.warn('Transaction failed or unsupported. Falling back to cleanup+retry. Error:', txnErr.message || txnErr);
-
-          try {
-            // Remove conflicting archived docs
-            await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' });
-
-            // Archive the active doc safely
-            const existingActive2 = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'active' });
-            if (existingActive2) {
-              existingActive2.status = 'archived';
-              existingActive2.previousFileId = existingActive2.fileId;
-              await existingActive2.save();
-            }
-
-            // Save the new media
-            await new TestSeriesMedia({
-              testSeriesId,
-              mediaType,
-              fileId: response.$id,
-              fileUrl,
-              fileName: originalname,
-              fileSize: size,
-              mimeType: mimetype,
-              uploadedBy: req.user._id,
-              status: 'active',
-            }).save();
-
-            console.log('Fallback successful: media metadata saved after cleanup');
-          } catch (fallbackErr) {
-            console.error('Fallback failed to save media metadata:', fallbackErr);
-            throw fallbackErr;
-          }
+        } finally {
+          session.endSession();
         }
       }
     } catch (dbError) {
-      console.error('Error saving media metadata to MongoDB (final):', dbError);
-      // Don't fail the upload if DB save fails, but log the error
+      console.error('Error saving media metadata to MongoDB (outer):', dbError);
+      // Do not throw - upload succeeded to Appwrite, so we keep going even if DB had problems
     }
 
     // If testSeriesId is provided, update TestSeries document
