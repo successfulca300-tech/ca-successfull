@@ -128,66 +128,71 @@ export const uploadTestSeriesMedia = async (req, res) => {
     const endpointWithV1 = baseEndpoint.endsWith('/v1') ? baseEndpoint : `${baseEndpoint}/v1`;
     const fileUrl = `${endpointWithV1}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${response.$id}/view?project=${APPWRITE_PROJECT_ID}`;
 
-    // Save metadata to MongoDB
+    // Save metadata to MongoDB using an atomic transaction to avoid unique-index races
     try {
-      // If there's an existing media of the same type, mark it as archived
       if (testSeriesId) {
-        const existingMedia = await TestSeriesMedia.findOne({
-          testSeriesId,
-          mediaType,
-          status: 'active',
-        });
+        // Start a mongoose session for transaction
+        let session = null;
+        try {
+          session = await mongoose.startSession();
+          session.startTransaction();
 
-        if (existingMedia) {
-          // Ensure we don't violate the unique index on (testSeriesId, mediaType, status)
-          // by deleting any existing archived record for this series/type before archiving.
-          try {
-            const existingArchived = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'archived' });
-            if (existingArchived) {
-              console.log(`Found existing archived media (will delete) for series=${testSeriesId} type=${mediaType} id=${existingArchived._id}`);
-              await TestSeriesMedia.deleteOne({ _id: existingArchived._id });
-            }
-          } catch (err) {
-            console.warn('Warning: could not clear previous archived media', err.message || err);
+          // Remove any already-archived document for this series/type to ensure uniqueness
+          await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' }, { session });
+
+          // Archive existing active doc (if any) atomically
+          const existingActiveDoc = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'active' }).session(session);
+          if (existingActiveDoc) {
+            await TestSeriesMedia.updateOne(
+              { _id: existingActiveDoc._id },
+              { $set: { status: 'archived', previousFileId: existingActiveDoc.fileId } },
+              { session }
+            );
           }
 
-          existingMedia.status = 'archived';
-          existingMedia.previousFileId = existingMedia.fileId;
-          await existingMedia.save();
-        }
+          // Create new media document within the same transaction
+          const newMedia = new TestSeriesMedia({
+            testSeriesId,
+            mediaType,
+            fileId: response.$id,
+            fileUrl,
+            fileName: originalname,
+            fileSize: size,
+            mimeType: mimetype,
+            uploadedBy: req.user._id,
+            status: 'active',
+          });
 
-        // Create new media document
-        const newMedia = new TestSeriesMedia({
-          testSeriesId,
-          mediaType,
-          fileId: response.$id,
-          fileUrl,
-          fileName: originalname,
-          fileSize: size,
-          mimeType: mimetype,
-          uploadedBy: req.user._id,
-          status: 'active',
-        });
+          await newMedia.save({ session });
 
-        await newMedia.save();
-      }
-    } catch (dbError) {
-      console.error('Error saving media metadata to MongoDB:', dbError);
+          await session.commitTransaction();
+          session.endSession();
+        } catch (txnErr) {
+          if (session) {
+            try {
+              await session.abortTransaction();
+            } catch (abortErr) {
+              console.error('Failed to abort transaction:', abortErr);
+            }
+            session.endSession();
+          }
 
-      // If duplicate key error due to archived uniqueness, try to clear the conflicting archived document and retry once
-      if (dbError && (dbError.code === 11000 || (dbError.errorResponse && dbError.errorResponse.code === 11000))) {
-        try {
-          const keyValue = (dbError.errorResponse && dbError.errorResponse.keyValue) || {};
-          const conflictQuery = {
-            testSeriesId: keyValue.testSeriesId || testSeriesId,
-            mediaType: keyValue.mediaType || mediaType,
-            status: keyValue.status || 'archived'
-          };
-          console.warn('Duplicate-key conflict detected. Attempting to remove conflicting document matching:', conflictQuery);
-          await TestSeriesMedia.deleteMany(conflictQuery);
+          // If transactions are not supported or transaction failed, fallback to cleanup+retry approach
+          console.warn('Transaction failed or unsupported. Falling back to cleanup+retry. Error:', txnErr.message || txnErr);
 
-          // Retry saving new media once
           try {
+            // Remove conflicting archived docs
+            await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' });
+
+            // Archive the active doc safely
+            const existingActive2 = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'active' });
+            if (existingActive2) {
+              existingActive2.status = 'archived';
+              existingActive2.previousFileId = existingActive2.fileId;
+              await existingActive2.save();
+            }
+
+            // Save the new media
             await new TestSeriesMedia({
               testSeriesId,
               mediaType,
@@ -199,15 +204,16 @@ export const uploadTestSeriesMedia = async (req, res) => {
               uploadedBy: req.user._id,
               status: 'active',
             }).save();
-            console.log('Retry successful: media metadata saved after resolving duplicate-key conflict');
-          } catch (retryErr) {
-            console.error('Retry failed for saving media metadata:', retryErr);
+
+            console.log('Fallback successful: media metadata saved after cleanup');
+          } catch (fallbackErr) {
+            console.error('Fallback failed to save media metadata:', fallbackErr);
+            throw fallbackErr;
           }
-        } catch (cleanupErr) {
-          console.error('Failed to cleanup conflicting archived documents:', cleanupErr);
         }
       }
-
+    } catch (dbError) {
+      console.error('Error saving media metadata to MongoDB (final):', dbError);
       // Don't fail the upload if DB save fails, but log the error
     }
 
