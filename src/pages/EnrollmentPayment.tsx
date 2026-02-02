@@ -4,7 +4,7 @@ import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { coursesAPI } from "@/lib/api";
+import { coursesAPI, enrollmentsAPI } from "@/lib/api";
 
 const EnrollmentPayment = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -36,7 +36,7 @@ const EnrollmentPayment = () => {
     try {
       setSubmitting(true);
       const payload: any = { courseId: course._id || courseId!, amount: course.price || 0, paymentStatus: 'paid' };
-      const res = await (await import('@/lib/api')).enrollmentsAPI.create(payload);
+      const res = await enrollmentsAPI.create(payload);
       if (res && (res as any)._id) {
         toast.success('Enrollment completed');
         navigate('/dashboard?tab=courses');
@@ -47,7 +47,7 @@ const EnrollmentPayment = () => {
       // If error indicates already enrolled, verify via API and proceed gracefully
       if (err.message && (err.message.includes('Already purchased') || err.message.includes('already enrolled') || err.message.includes('Already'))) {
         try {
-          const check: any = await (await import('@/lib/api')).enrollmentsAPI.checkEnrollment({ courseId: course._id || courseId! });
+          const check: any = await enrollmentsAPI.checkEnrollment({ courseId: course._id || courseId! });
           if (check && check.enrolled) {
             toast.info('You are already enrolled. Redirecting to Dashboard.');
             navigate('/dashboard?tab=courses');

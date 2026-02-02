@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Youtube, Send, Phone, Linkedin, Instagram, Mail, MapPin } from "lucide-react";
-import logo from "@/assets/logo.png";
+
 import { useEffect, useState } from 'react';
 import { settingsAPI } from '@/lib/api';
 
@@ -31,7 +31,7 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand */}
           <div>
-            <img src={logo} alt={siteName} className="h-16 mb-4 bg-white p-2 rounded-lg" />
+            <img src="/logo.svg" alt={siteName} className="h-16 mb-4 bg-white p-2 rounded-lg" />
             <p className="text-white/80 mb-4 text-sm leading-relaxed">
               Your trusted partner for CA, CMA & CS exam preparation with proven track record of success.
             </p>

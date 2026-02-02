@@ -228,7 +228,7 @@ const CourseDetail = () => {
     }
 
     try {
-      await (await import('@/lib/api')).cartAPI.add(id!, 'course', 1);
+      await cartAPI.add(id!, 'course', 1);
       toast.success('Added to cart');
       navigate('/cart');
     } catch (err: any) {
