@@ -35,6 +35,7 @@ console.log('='.repeat(60));
 console.log('BACKEND SERVER STARTING');
 console.log('='.repeat(60));
 console.log(`Node Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log(`Node Version: ${process.version}`);
 console.log(`Timestamp: ${new Date().toISOString()}`);
 console.log(`Current Working Directory: ${process.cwd()}`);
 console.log('='.repeat(60));

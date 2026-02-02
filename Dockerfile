@@ -1,7 +1,7 @@
 # Root Dockerfile that delegates to backend
 # Railway will detect this and use it for deployment
 
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -11,8 +11,9 @@ COPY backend/ ./backend/
 
 WORKDIR /app/backend
 
-# Clear npm cache and install dependencies
-RUN npm cache clean --force && npm ci --only=production
+# Clear npm cache and install ONLY production dependencies (omit dev)
+# Use npm install --omit=dev to avoid lockfile mismatch failures when package-lock.json is out of sync
+RUN npm cache clean --force && npm install --omit=dev --no-audit --no-fund
 
 # Expose port
 EXPOSE 5000

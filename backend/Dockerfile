@@ -1,5 +1,5 @@
 # Use official Node.js runtime as base image
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app
@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install only production dependencies (omit dev dependencies)
+RUN npm cache clean --force && npm install --omit=dev --no-audit --no-fund
 
 # Copy the rest of the application code
 COPY . .
