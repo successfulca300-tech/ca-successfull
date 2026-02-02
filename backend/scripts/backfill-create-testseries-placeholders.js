@@ -4,6 +4,7 @@ import TestSeries from '../models/TestSeries.js';
 import TestSeriesMedia from '../models/TestSeriesMedia.js';
 import TestSeriesPaper from '../models/TestSeriesPaper.js';
 import Category from '../models/Category.js';
+import Enrollment from '../models/Enrollment.js';
 
 dotenv.config();
 
@@ -59,6 +60,14 @@ async function migrate() {
     // Update paper docs
     const paperRes = await TestSeriesPaper.updateMany({ testSeriesId: shorthand }, { $set: { testSeriesId: placeholder._id.toString() } });
     console.log(`Updated ${paperRes.modifiedCount || paperRes.nModified || 0} paper docs from ${shorthand} -> ${placeholder._id}`);
+
+    // Update enrollments that referenced shorthand testSeriesId
+    try {
+      const enrollRes = await Enrollment.updateMany({ testSeriesId: shorthand }, { $set: { testSeriesId: placeholder._id.toString() } });
+      console.log(`Updated ${enrollRes.modifiedCount || enrollRes.nModified || 0} enrollments from ${shorthand} -> ${placeholder._id}`);
+    } catch (e) {
+      console.warn('Failed to update enrollments for', shorthand, e.message);
+    }
 
     // Optionally set placeholder thumbnail from latest active media
     const latestMedia = await TestSeriesMedia.findOne({ testSeriesId: placeholder._id.toString(), status: 'active' }).sort({ createdAt: -1 });
