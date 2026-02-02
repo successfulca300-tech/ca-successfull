@@ -23,17 +23,22 @@ const TestSeries = () => {
     }
   }, []);
 
+  // Fetched details from backend to prefer DB thumbnails when available
+  const [fetchedSeriesMap, setFetchedSeriesMap] = useState<Record<string, any>>({});
+
   // Set displayed series (active ones, sorted by displayOrder)
   useEffect(() => {
     const activeSeries = FIXED_TEST_SERIES
       .map((series, index) => {
         const managed = managedData[series._id] || {};
+        const fetched = fetchedSeriesMap[series._id] || {};
         return {
           ...series,
-          title: managed.cardTitle || managed.title || series.title,
-          description: managed.cardDescription || managed.description || series.description,
-          thumbnail: managed.cardThumbnail || series.thumbnail,
-          isActive: managed.isActive !== false, // Default to true
+          title: fetched.title || managed.cardTitle || managed.title || series.title,
+          description: fetched.description || managed.cardDescription || managed.description || series.description,
+          // Prefer fetched DB thumbnail (created by subadmin) over managed or fixed
+          thumbnail: fetched.thumbnail || managed.cardThumbnail || series.thumbnail,
+          isActive: fetched.isActive !== undefined ? fetched.isActive : (managed.isActive !== false), // If backend says active, prefer it
           displayOrder: managed.displayOrder !== undefined ? managed.displayOrder : index,
         };
       })
@@ -41,7 +46,36 @@ const TestSeries = () => {
       .sort((a, b) => a.displayOrder - b.displayOrder);
 
     setDisplayedSeries(activeSeries);
-  }, [managedData]);
+  }, [managedData, fetchedSeriesMap]);
+
+  // Load DB overrides (thumbnail etc.) for fixed series (s1..s4)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const promises = FIXED_TEST_SERIES.map(async (series) => {
+          try {
+            const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/g, '')}/api/testseries/${series._id}`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (data && data.testSeries) return { id: series._id, data: data.testSeries };
+            return null;
+          } catch (err) {
+            return null;
+          }
+        });
+
+        const results = await Promise.all(promises);
+        if (!mounted) return;
+        const map: Record<string, any> = {};
+        results.forEach((r) => { if (r && r.id) map[r.id] = r.data; });
+        setFetchedSeriesMap(map);
+      } catch (e) {
+        console.error('Failed to fetch test series overrides', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const handleViewDetails = (test: any) => navigate(`/testseries/${test._id}`);
 
