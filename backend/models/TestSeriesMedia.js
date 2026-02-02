@@ -5,7 +5,7 @@ const testSeriesMediaSchema = new mongoose.Schema(
     testSeriesId: {
       type: String,
       required: true,
-      enum: ['s1', 's2', 's3', 's4'],
+      // Can be shorthand ('s1'..'s4') or a MongoDB ObjectId string for resolved TestSeries
       index: true,
     },
     mediaType: {

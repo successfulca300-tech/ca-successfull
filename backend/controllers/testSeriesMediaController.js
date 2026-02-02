@@ -129,6 +129,59 @@ export const uploadTestSeriesMedia = async (req, res) => {
     const endpointWithV1 = baseEndpoint.endsWith('/v1') ? baseEndpoint : `${baseEndpoint}/v1`;
     const fileUrl = `${endpointWithV1}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${response.$id}/view?project=${APPWRITE_PROJECT_ID}`;
 
+    // Resolve TestSeries up-front so media can be saved against a canonical DB _id
+    let originalTestSeriesId = testSeriesId;
+    let resolvedTestSeriesId = testSeriesId;
+    let resolvedTestSeriesDoc = null;
+
+    if (testSeriesId) {
+      // Try to locate existing TestSeries by ObjectId or seriesType
+      if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+        resolvedTestSeriesDoc = await TestSeries.findById(testSeriesId);
+        if (resolvedTestSeriesDoc) resolvedTestSeriesId = resolvedTestSeriesDoc._id.toString();
+      }
+      if (!resolvedTestSeriesDoc) {
+        const seriesType = testSeriesId.toUpperCase();
+        resolvedTestSeriesDoc = await TestSeries.findOne({ seriesType });
+        if (resolvedTestSeriesDoc) resolvedTestSeriesId = resolvedTestSeriesDoc._id.toString();
+      }
+
+      // Auto-create placeholder TestSeries for recognized shorthand BEFORE saving media
+      if (!resolvedTestSeriesDoc && typeof testSeriesId === 'string' && /^s[1-4]$/i.test(testSeriesId)) {
+        try {
+          // Ensure placeholder category exists
+          let category = await Category.findOne({ slug: 'auto-testseries' });
+          if (!category) {
+            category = await Category.create({ name: 'Auto TestSeries Category', slug: 'auto-testseries', description: 'Auto-created category for placeholder TestSeries' });
+          }
+
+          const seriesTypeLabelMap = { 'S1': 'Full Syllabus', 'S2': '50% Syllabus', 'S3': '30% Syllabus', 'S4': 'CA Successful Specials' };
+
+          const placeholderData = {
+            title: `${testSeriesId.toUpperCase()} Test Series (Auto-created)`,
+            description: `Auto-created placeholder for ${testSeriesId.toUpperCase()}`,
+            seriesType: testSeriesId.toUpperCase(),
+            seriesTypeLabel: seriesTypeLabelMap[testSeriesId.toUpperCase()] || 'Full Syllabus',
+            category: category._id,
+            pricing: {},
+            subjects: ['FR','AFM','Audit','DT','IDT'],
+            createdBy: req.user?._id || null,
+            publishStatus: 'published',
+            isActive: true,
+          };
+
+          resolvedTestSeriesDoc = await TestSeries.create(placeholderData);
+          resolvedTestSeriesId = resolvedTestSeriesDoc._id.toString();
+          console.log('Auto-created placeholder TestSeries:', resolvedTestSeriesId);
+        } catch (createErr) {
+          console.error('Failed to auto-create placeholder TestSeries:', createErr);
+          // Fall back to using shorthand id as before
+          resolvedTestSeriesDoc = null;
+          resolvedTestSeriesId = originalTestSeriesId;
+        }
+      }
+    }
+
     // Save metadata to MongoDB using a transaction to avoid races/duplicate-key errors
     try {
       if (testSeriesId) {
@@ -136,21 +189,22 @@ export const uploadTestSeriesMedia = async (req, res) => {
         try {
           session.startTransaction();
 
-          // Remove any already-archived documents for this series/type (cleanup)
-          await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' }).session(session);
+          // Cleanup archived docs for both shorthand and resolved ids
+          const cleanupIds = Array.from(new Set([originalTestSeriesId, resolvedTestSeriesId]));
+          await TestSeriesMedia.deleteMany({ testSeriesId: { $in: cleanupIds }, mediaType, status: 'archived' }).session(session);
 
-          // Archive the currently active media atomically (if exists)
-          const existingActive = await TestSeriesMedia.findOne({ testSeriesId, mediaType, status: 'active' }).session(session);
+          // Archive the currently active media atomically (if exists) matching either representation
+          const existingActive = await TestSeriesMedia.findOne({ testSeriesId: { $in: cleanupIds }, mediaType, status: 'active' }).session(session);
           if (existingActive) {
             existingActive.status = 'archived';
             existingActive.previousFileId = existingActive.fileId;
             await existingActive.save({ session });
-            console.log(`Archived existing media id=${existingActive._id} for series=${testSeriesId} type=${mediaType}`);
+            console.log(`Archived existing media id=${existingActive._id} for series=${originalTestSeriesId} type=${mediaType}`);
           }
 
-          // Insert the new media document
+          // Insert the new media document using resolvedTestSeriesId (prefer DB _id when available)
           const newMedia = new TestSeriesMedia({
-            testSeriesId,
+            testSeriesId: resolvedTestSeriesId,
             mediaType,
             fileId: response.$id,
             fileUrl,
@@ -165,15 +219,25 @@ export const uploadTestSeriesMedia = async (req, res) => {
 
           await session.commitTransaction();
           console.log('Media metadata saved in transaction, newMediaId=', newMedia._id);
+
+          // Post-transaction: migrate any legacy media docs that used shorthand to the resolved DB id
+          if (resolvedTestSeriesDoc && originalTestSeriesId && originalTestSeriesId !== resolvedTestSeriesId) {
+            try {
+              await TestSeriesMedia.updateMany({ testSeriesId: originalTestSeriesId }, { $set: { testSeriesId: resolvedTestSeriesId } });
+              console.log(`Migrated legacy media docs from ${originalTestSeriesId} to ${resolvedTestSeriesId}`);
+            } catch (migErr) {
+              console.error('Failed to migrate legacy media docs:', migErr);
+            }
+          }
         } catch (txErr) {
           await session.abortTransaction();
           console.error('Transaction failed when saving media metadata:', txErr);
 
           // As a fallback, attempt the previous cleanup+retry approach for ALL transaction failures
           try {
-            await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' });
+            await TestSeriesMedia.deleteMany({ testSeriesId: { $in: [originalTestSeriesId, resolvedTestSeriesId] }, mediaType, status: 'archived' });
             const retryMedia = new TestSeriesMedia({
-              testSeriesId,
+              testSeriesId: resolvedTestSeriesId,
               mediaType,
               fileId: response.$id,
               fileUrl,
@@ -185,6 +249,16 @@ export const uploadTestSeriesMedia = async (req, res) => {
             });
             await retryMedia.save();
             console.log('Fallback retry successful after transaction failure');
+
+            // Attempt migration as well
+            if (resolvedTestSeriesDoc && originalTestSeriesId && originalTestSeriesId !== resolvedTestSeriesId) {
+              try {
+                await TestSeriesMedia.updateMany({ testSeriesId: originalTestSeriesId }, { $set: { testSeriesId: resolvedTestSeriesId } });
+                console.log(`Migrated legacy media docs from ${originalTestSeriesId} to ${resolvedTestSeriesId}`);
+              } catch (migErr) {
+                console.error('Failed to migrate legacy media docs after fallback save:', migErr);
+              }
+            }
           } catch (retryErr) {
             console.error('Fallback retry also failed:', retryErr);
           }
@@ -197,59 +271,41 @@ export const uploadTestSeriesMedia = async (req, res) => {
       // Do not throw - upload succeeded to Appwrite, so we keep going even if DB had problems
     }
 
-    // If testSeriesId is provided, update TestSeries document
-    if (testSeriesId) {
+    // Update the resolved TestSeries doc (if available) with the new media info so thumbnail/video shows immediately
+    if (resolvedTestSeriesDoc) {
       try {
-        // testSeriesId might be 's1', 's2', etc. - convert to valid format if needed
-        // Check if it's already a valid ObjectId
+        if (resolvedTestSeriesDoc.createdBy && resolvedTestSeriesDoc.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+          console.warn('User does not have permission to update test series');
+        } else {
+          if (mediaType === 'video') {
+            resolvedTestSeriesDoc.videoUrl = fileUrl;
+            resolvedTestSeriesDoc.videoFileId = response.$id;
+            resolvedTestSeriesDoc.videoType = 'UPLOAD';
+          } else if (mediaType === 'image') {
+            resolvedTestSeriesDoc.thumbnail = fileUrl;
+          }
+          try {
+            await resolvedTestSeriesDoc.save();
+          } catch (saveErr) {
+            console.error('Error saving testSeries after media upload:', saveErr);
+          }
+        }
+      } catch (dbError) {
+        console.error('Error updating test series:', dbError);
+      }
+    } else if (testSeriesId) {
+      // Fallback: attempt to update TestSeries by seriesType or _id if resolved doc wasn't found or created
+      try {
         let query = {};
         if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
           query._id = testSeriesId;
         } else {
-          // Otherwise search by seriesType (S1, S2, S3, S4)
           const seriesTypeMap = { 's1': 'S1', 's2': 'S2', 's3': 'S3', 's4': 'S4' };
           query.seriesType = seriesTypeMap[testSeriesId.toLowerCase()] || testSeriesId;
         }
 
         let testSeries = await TestSeries.findOne(query);
-        
-        // If TestSeries is missing for shorthand (S1..S4), auto-create a placeholder so uploads attach cleanly
-        if (!testSeries) {
-          console.warn(`TestSeries not found with query:`, query);
-          // Only auto-create when seriesType is recognized (e.g., 'S1', 'S2', ...)
-          if (query.seriesType && typeof query.seriesType === 'string' && /^S[1-4]$/.test(query.seriesType)) {
-            try {
-              // Ensure placeholder category exists
-              let category = await Category.findOne({ slug: 'auto-testseries' });
-              if (!category) {
-                category = await Category.create({ name: 'Auto TestSeries Category', slug: 'auto-testseries', description: 'Auto-created category for placeholder TestSeries' });
-              }
-
-              const seriesTypeLabelMap = { 'S1': 'Full Syllabus', 'S2': '50% Syllabus', 'S3': '30% Syllabus', 'S4': 'CA Successful Specials' };
-
-              const placeholderData = {
-                title: `${query.seriesType} Test Series (Auto-created)`,
-                description: `Auto-created placeholder for ${query.seriesType}`,
-                seriesType: query.seriesType,
-                seriesTypeLabel: seriesTypeLabelMap[query.seriesType] || 'Full Syllabus',
-                category: category._id,
-                pricing: {},
-                subjects: ['FR','AFM','Audit','DT','IDT'],
-                createdBy: req.user?._id || null,
-                publishStatus: 'published',
-                isActive: true,
-              };
-              testSeries = await TestSeries.create(placeholderData);
-              console.log('Auto-created placeholder TestSeries:', testSeries._id.toString());
-            } catch (createErr) {
-              console.error('Failed to auto-create placeholder TestSeries:', createErr);
-            }
-          }
-        }
-
-        // If we now have a TestSeries doc, try to save the media info there
         if (testSeries) {
-          // Check if user has permission (creator or admin)
           if (testSeries.createdBy && testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
             console.warn('User does not have permission to update test series');
           } else {
@@ -269,7 +325,6 @@ export const uploadTestSeriesMedia = async (req, res) => {
         }
       } catch (dbError) {
         console.error('Error updating test series:', dbError);
-        // Don't fail the upload if DB update fails
       }
     }
 

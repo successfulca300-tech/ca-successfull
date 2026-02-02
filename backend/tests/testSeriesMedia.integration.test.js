@@ -89,13 +89,15 @@ describe('Test series media upload and placeholder creation', () => {
     const ts = await TestSeries.findOne({ seriesType: 'S2' });
     expect(ts).toBeDefined();
     expect(ts.title).toMatch(/S2 Test Series \(Auto-created\)/);
-    expect(ts.thumbnail).toBeDefined();
+    // Thumbnail should be set to the uploaded file URL
+    expect(ts.thumbnail).toBe(res.body.url);
 
-    // Check media doc saved for shorthand id
-    const media = await TestSeriesMedia.findOne({ testSeriesId: 's2' });
+    // Check media doc saved and linked to the TestSeries _id
+    const media = await TestSeriesMedia.findOne({ fileId: res.body.fileId });
     expect(media).toBeDefined();
     expect(media.status).toBe('active');
-    expect(media.fileId).toBeDefined();
     expect(media.fileId).toBe(res.body.fileId);
+    // Media testSeriesId should reference the created TestSeries _id (canonical)
+    expect(media.testSeriesId).toBe(ts._id.toString());
   });
 });

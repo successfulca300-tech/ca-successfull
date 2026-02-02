@@ -9,7 +9,8 @@
     "dev": "nodemon server.js",
     "seed": "node scripts/seedUsers.js",
     "create-admin": "node scripts/createAdmin.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
+    "backfill:testseries": "node scripts/backfill-create-testseries-placeholders.js"
   
   },
   "keywords": [
