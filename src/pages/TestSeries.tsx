@@ -48,30 +48,20 @@ const TestSeries = () => {
     setDisplayedSeries(activeSeries);
   }, [managedData, fetchedSeriesMap]);
 
-  // Load DB overrides (thumbnail etc.) for fixed series (s1..s4)
+  // Load DB overrides (thumbnail etc.) for fixed series (s1..s4) in a single call
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const promises = FIXED_TEST_SERIES.map(async (series) => {
-          try {
-            const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/g, '')}/api/testseries/${series._id}`);
-            if (!res.ok) return null;
-            const data = await res.json();
-            if (data && data.testSeries) return { id: series._id, data: data.testSeries };
-            return null;
-          } catch (err) {
-            return null;
-          }
-        });
-
-        const results = await Promise.all(promises);
+        const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/g, '')}/api/testseries/fixed-overrides`);
+        if (!res.ok) return;
+        const data = await res.json();
         if (!mounted) return;
-        const map: Record<string, any> = {};
-        results.forEach((r) => { if (r && r.id) map[r.id] = r.data; });
-        setFetchedSeriesMap(map);
+        if (data && data.overrides) {
+          setFetchedSeriesMap(data.overrides);
+        }
       } catch (e) {
-        console.error('Failed to fetch test series overrides', e);
+        console.error('Failed to fetch fixed test series overrides', e);
       }
     })();
     return () => { mounted = false; };
