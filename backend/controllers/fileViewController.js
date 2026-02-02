@@ -160,7 +160,16 @@ export const proxyFileView = async (req, res) => {
     }
 
     // Use global fetch (Node 18+). Do not require external node-fetch dependency.
-    const fetchRes = await fetch(url, { headers: APPWRITE_API_KEY ? { 'X-Appwrite-Key': APPWRITE_API_KEY } : {} });
+    // Build headers. Appwrite requires both project header and key when using API key.
+    const headers = {};
+    if (APPWRITE_API_KEY) {
+      headers['X-Appwrite-Key'] = APPWRITE_API_KEY;
+      if (process.env.APPWRITE_PROJECT_ID) {
+        headers['X-Appwrite-Project'] = process.env.APPWRITE_PROJECT_ID;
+      }
+    }
+
+    const fetchRes = await fetch(url, { headers });
     if (!fetchRes.ok) {
       const status = fetchRes.status;
       let detail = '';
