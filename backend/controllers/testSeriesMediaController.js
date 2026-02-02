@@ -1,4 +1,4 @@
-import { Client, Storage, InputFile } from 'node-appwrite';
+import { Client, Storage, InputFile, Permission, Role } from 'node-appwrite';
 import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
@@ -106,7 +106,8 @@ export const uploadTestSeriesMedia = async (req, res) => {
     const response = await storage.createFile(
       APPWRITE_BUCKET_ID,
       fileId,
-      inputFile
+      inputFile,
+      [Permission.read(Role.any())] // make media public so thumbnails/video previews load in browser
     );
 
     if (!response) {
