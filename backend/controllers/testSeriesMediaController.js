@@ -342,17 +342,26 @@ export const getTestSeriesMedia = async (req, res) => {
   try {
     const { testSeriesId, mediaType } = req.query;
 
-    const query = { status: 'active' };
+    const queryBase = { status: 'active' };
 
+    // If testSeriesId provided, match both shorthand and ObjectId representations
     if (testSeriesId) {
-      query.testSeriesId = testSeriesId;
+      const candidateIds = [testSeriesId];
+      if (!mongoose.Types.ObjectId.isValid(testSeriesId)) {
+        const tsDoc = await TestSeries.findOne({ seriesType: testSeriesId.toUpperCase() });
+        if (tsDoc) candidateIds.push(tsDoc._id.toString());
+      } else {
+        const tsDoc = await TestSeries.findById(testSeriesId);
+        if (tsDoc && tsDoc.seriesType) candidateIds.push(tsDoc.seriesType.toLowerCase());
+      }
+      queryBase.testSeriesId = { $in: Array.from(new Set(candidateIds)) };
     }
 
     if (mediaType) {
-      query.mediaType = mediaType;
+      queryBase.mediaType = mediaType;
     }
 
-    const media = await TestSeriesMedia.find(query)
+    const media = await TestSeriesMedia.find(queryBase)
       .populate('uploadedBy', 'email firstName lastName')
       .sort({ createdAt: -1 });
 

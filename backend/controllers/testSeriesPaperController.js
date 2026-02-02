@@ -197,6 +197,8 @@ export const uploadPaper = async (req, res) => {
       fileSizeBytes: fileBuffer.length,
       availabilityDate: availabilityDate || new Date(),
       isAvailable: true,
+      publishStatus: 'published', // Subadmin uploads are auto-published by default
+      isVisibleToUsers: true,
       createdBy: req.user._id,
     });
 
@@ -251,12 +253,25 @@ export const getPapersByTestSeries = async (req, res) => {
     
     // Use ID as-is for query (both shorthand and ObjectId should work)
     let queryId = testSeries ? testSeries._id.toString() : testSeriesId;
+
     // Normalize shorthand to lowercase for consistency with upload
     if (!testSeries && testSeriesId) {
       queryId = testSeriesId.toLowerCase();
     }
 
-    const query = { testSeriesId: queryId };
+    // Build candidate ids to match stored paper.testSeriesId values (ObjectId or shorthand)
+    const candidatePaperIds = [queryId];
+    if (!mongoose.Types.ObjectId.isValid(queryId)) {
+      const tsDoc = await TestSeries.findOne({ seriesType: queryId.toUpperCase() });
+      if (tsDoc) candidatePaperIds.push(tsDoc._id.toString());
+    } else {
+      const tsDoc = await TestSeries.findById(queryId);
+      if (tsDoc && tsDoc.seriesType) candidatePaperIds.push(tsDoc.seriesType.toLowerCase());
+    }
+
+    const uniqueCandidatePaperIds = Array.from(new Set(candidatePaperIds));
+
+    const query = { testSeriesId: { $in: uniqueCandidatePaperIds }, publishStatus: 'published', isVisibleToUsers: true };
 
     if (group) query.group = group;
     if (subject) query.subject = subject;
@@ -304,17 +319,34 @@ export const getPapersGroupedBySubject = async (req, res) => {
     }
 
     // CRITICAL ACCESS CONTROL: Check enrollment and get purchased subjects
-    // Use normalized testSeriesId
+    // Use normalized testSeriesId but also allow matching alternate representations (ObjectId vs shorthand)
     const Enrollment = (await import('../models/Enrollment.js')).default;
+
+    // Build candidate ids to match enrollment entries reliably
+    const candidateEnrollmentIds = [normalizedTestSeriesId];
+
+    // If normalizedTestSeriesId is NOT an ObjectId, try to find a TestSeries doc with matching seriesType
+    if (!mongoose.Types.ObjectId.isValid(normalizedTestSeriesId)) {
+      const tsDoc = await TestSeries.findOne({ seriesType: normalizedTestSeriesId.toUpperCase() });
+      if (tsDoc) candidateEnrollmentIds.push(tsDoc._id.toString());
+    } else {
+      // If it is an ObjectId, also try to add shorthand (s1, s2...) if seriesType exists
+      const tsDoc = await TestSeries.findById(normalizedTestSeriesId);
+      if (tsDoc && tsDoc.seriesType) candidateEnrollmentIds.push(tsDoc.seriesType.toLowerCase());
+    }
+
+    // Deduplicate
+    const uniqueCandidateEnrollmentIds = Array.from(new Set(candidateEnrollmentIds));
+
     const enrollments = await Enrollment.find({
       userId: userId,
-      testSeriesId: normalizedTestSeriesId,
+      testSeriesId: { $in: uniqueCandidateEnrollmentIds },
       paymentStatus: 'paid'
     });
 
     // If no paid enrollment, return empty papers
     if (!enrollments || enrollments.length === 0) {
-      console.log(`[Access Control] No paid enrollment found for user ${userId} on series ${normalizedTestSeriesId}`);
+      console.log(`[Access Control] No paid enrollment found for user ${userId} on series ${normalizedTestSeriesId} - checked IDs: ${uniqueCandidateEnrollmentIds}`);
       return res.json({ success: true, papers: {} });
     }
 
@@ -350,15 +382,27 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     console.log(`[Access Control] Extracted unique subjects:`, Array.from(uniqueSubjects));
 
-    // Query papers using the normalized testSeriesId format
-    const query = { testSeriesId: normalizedTestSeriesId, isAvailable: true, subject: { $in: Array.from(uniqueSubjects) } };
+    // Query papers using the normalized testSeriesId format but also accept alternate representations
+    // Build candidate paper IDs similar to enrollment check
+    const candidatePaperIds = [normalizedTestSeriesId];
+    if (!mongoose.Types.ObjectId.isValid(normalizedTestSeriesId)) {
+      const tsDoc = await TestSeries.findOne({ seriesType: normalizedTestSeriesId.toUpperCase() });
+      if (tsDoc) candidatePaperIds.push(tsDoc._id.toString());
+    } else {
+      const tsDoc = await TestSeries.findById(normalizedTestSeriesId);
+      if (tsDoc && tsDoc.seriesType) candidatePaperIds.push(tsDoc.seriesType.toLowerCase());
+    }
+
+    const uniqueCandidatePaperIds = Array.from(new Set(candidatePaperIds));
+
+    const query = { testSeriesId: { $in: uniqueCandidatePaperIds }, isAvailable: true, publishStatus: 'published', isVisibleToUsers: true, subject: { $in: Array.from(uniqueSubjects) } };
 
     if (group) query.group = group;
     if (series) query.series = series;
 
     console.log('[Access Control] Querying papers with:', query);
 
-    // Use the normalized testSeriesId for paper lookup
+    // Use the set of candidate testSeriesIds for paper lookup
     const papers = await TestSeriesPaper.find(query)
       .populate('createdBy', 'name')
       .sort({ subject: 1, paperType: 1, paperNumber: 1, createdAt: 1 });

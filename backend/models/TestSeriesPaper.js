@@ -74,6 +74,16 @@ const testSeriesPaperSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Visibility & publish status
+    publishStatus: {
+      type: String,
+      enum: ['draft', 'published'],
+      default: 'published',
+    },
+    isVisibleToUsers: {
+      type: Boolean,
+      default: true,
+    },
     // Created by
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
