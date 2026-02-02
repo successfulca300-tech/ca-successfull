@@ -67,6 +67,7 @@ router.delete('/papers/:paperId', protect, subadmin, deletePaper);
 
 // Generic test series routes - AFTER all specific routes
 router.get('/', getTestSeries);
+router.get('/fixed-overrides', getFixedSeriesOverrides); // returns overrides (thumbnail etc.) for s1..s4 in one call
 router.get('/category/:categoryId', getTestSeriesByCategory);
 router.post('/', protect, subadmin, createTestSeriesValidation, createTestSeries);
 

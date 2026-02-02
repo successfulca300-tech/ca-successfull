@@ -332,6 +332,39 @@ export const getTestSeriesById = async (req, res) => {
   }
 };
 
+// @desc    Get overrides for fixed test series (s1..s4)
+// @route   GET /api/testseries/fixed-overrides
+// @access  Public
+export const getFixedSeriesOverrides = async (req, res) => {
+  try {
+    const fixedIds = ['S1', 'S2', 'S3', 'S4'];
+    const docs = await TestSeries.find({ seriesType: { $in: fixedIds } }).select('seriesType thumbnail title description isActive createAt updatedAt');
+
+    const map = {};
+    for (const s of docs) {
+      const key = s.seriesType.toLowerCase();
+      let thumbnail = s.thumbnail;
+      if (thumbnail && typeof thumbnail === 'string' && /\/storage\/buckets\//.test(thumbnail)) {
+        const base = (process.env.BACKEND_URL || '').replace(/\/$/, '');
+        thumbnail = `${base}/api/files/public?fileUrl=${encodeURIComponent(thumbnail)}`;
+      }
+      map[key] = {
+        id: s._id.toString(),
+        seriesType: s.seriesType,
+        title: s.title,
+        description: s.description,
+        thumbnail,
+        isActive: s.isActive,
+      };
+    }
+
+    return res.json({ success: true, overrides: map });
+  } catch (error) {
+    console.error('getFixedSeriesOverrides error', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 // @desc    Create test series (subadmin/admin)
 // @route   POST /api/testseries
 // @access  Private
