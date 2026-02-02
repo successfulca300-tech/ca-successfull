@@ -308,6 +308,20 @@ export const getTestSeriesById = async (req, res) => {
       }
     }
 
+    // If thumbnail is an Appwrite URL, proxy it through backend so browser does not need Appwrite headers
+    try {
+      const thumbnail = testSeries.thumbnail;
+      if (thumbnail && typeof thumbnail === 'string' && /\/storage\/buckets\//.test(thumbnail)) {
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+        const host = req.get('host');
+        const baseFromReq = `${protocol}://${host}`;
+        const base = (process.env.BACKEND_URL || baseFromReq).replace(/\/$/, '');
+        testSeries.thumbnail = `${base}/api/files/public?fileUrl=${encodeURIComponent(thumbnail)}`;
+      }
+    } catch (e) {
+      console.warn('Failed to proxify thumbnail URL for testSeries', e.message);
+    }
+
     res.json({ success: true, testSeries });
   } catch (error) {
     console.error(error);
