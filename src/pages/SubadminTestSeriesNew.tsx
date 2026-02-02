@@ -409,7 +409,7 @@ const SubAdminTestSeriesNew = () => {
                           <label className="block text-sm font-medium mb-2">Series 1 Upload Date</label>
                           <Input
                             type="date"
-                            value={formData.seriesDates.series1UploadDate}
+                            value={/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(formData.seriesDates.series1UploadDate || '') ? formData.seriesDates.series1UploadDate : ''}
                             onChange={(e) => setFormData({
                               ...formData,
                               seriesDates: { ...formData.seriesDates, series1UploadDate: e.target.value }
@@ -420,7 +420,7 @@ const SubAdminTestSeriesNew = () => {
                           <label className="block text-sm font-medium mb-2">Series 2 Upload Date</label>
                           <Input
                             type="date"
-                            value={formData.seriesDates.series2UploadDate}
+                            value={/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(formData.seriesDates.series2UploadDate || '') ? formData.seriesDates.series2UploadDate : ''}
                             onChange={(e) => setFormData({
                               ...formData,
                               seriesDates: { ...formData.seriesDates, series2UploadDate: e.target.value }

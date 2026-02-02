@@ -715,9 +715,7 @@ const SubadminTestSeries = () => {
                         </label>
                         <Input
                           type="date"
-                          value={
-                            currentSeries.seriesDates?.series1UploadDate || ""
-                          }
+                          value={/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(currentSeries.seriesDates?.series1UploadDate || '') ? currentSeries.seriesDates?.series1UploadDate : ''}
                           onChange={(e) => {
                             const dates = currentSeries.seriesDates || {};
                             updateField("seriesDates", {
@@ -733,9 +731,7 @@ const SubadminTestSeries = () => {
                         </label>
                         <Input
                           type="date"
-                          value={
-                            currentSeries.seriesDates?.series2UploadDate || ""
-                          }
+                          value={/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(currentSeries.seriesDates?.series2UploadDate || '') ? currentSeries.seriesDates?.series2UploadDate : ''}
                           onChange={(e) => {
                             const dates = currentSeries.seriesDates || {};
                             updateField("seriesDates", {
@@ -751,9 +747,7 @@ const SubadminTestSeries = () => {
                         </label>
                         <Input
                           type="date"
-                          value={
-                            currentSeries.seriesDates?.series3UploadDate || ""
-                          }
+                          value={/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(currentSeries.seriesDates?.series3UploadDate || '') ? currentSeries.seriesDates?.series3UploadDate : ''}
                           onChange={(e) => {
                             const dates = currentSeries.seriesDates || {};
                             updateField("seriesDates", {
