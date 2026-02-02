@@ -1,5 +1,6 @@
 import TestSeriesPaper from '../models/TestSeriesPaper.js';
 import TestSeries from '../models/TestSeries.js';
+import Category from '../models/Category.js';
 import { validationResult } from 'express-validator';
 import { uploadFileToAppwrite, deleteFileFromAppwrite } from '../utils/appwriteFileService.js';
 import fs from 'fs';
@@ -133,8 +134,40 @@ export const uploadPaper = async (req, res) => {
     // If still not found, accept shorthand format (s1, s2, etc) for frontend-generated IDs
     if (!testSeries) {
       console.log('[Upload] No TestSeries document found, using provided ID as shorthand:', testSeriesId);
-      // Normalize shorthand to lowercase for consistency
-      actualTestSeriesId = testSeriesId.toLowerCase();
+      // Try to auto-create a placeholder TestSeries for recognized series types (S1..S4)
+      const seriesTypeCandidate = testSeriesId.toUpperCase();
+      if (/^S[1-4]$/.test(seriesTypeCandidate)) {
+        try {
+          let category = await Category.findOne({ slug: 'auto-testseries' });
+          if (!category) {
+            category = await Category.create({ name: 'Auto TestSeries Category', slug: 'auto-testseries', description: 'Auto-created category for placeholder TestSeries' });
+          }
+          const seriesTypeLabelMap = { 'S1': 'Full Syllabus', 'S2': '50% Syllabus', 'S3': '30% Syllabus', 'S4': 'CA Successful Specials' };
+
+          const placeholderData = {
+            title: `${seriesTypeCandidate} Test Series (Auto-created)`,
+            description: `Auto-created placeholder for ${seriesTypeCandidate}`,
+            seriesType: seriesTypeCandidate,
+            seriesTypeLabel: seriesTypeLabelMap[seriesTypeCandidate] || 'Full Syllabus',
+            category: category._id,
+            pricing: {},
+            subjects: ['FR','AFM','Audit','DT','IDT'],
+            createdBy: req.user?._id || null,
+            publishStatus: 'published',
+            isActive: true,
+          };
+          testSeries = await TestSeries.create(placeholderData);
+          actualTestSeriesId = testSeries._id.toString();
+          console.log('[Upload] Auto-created placeholder TestSeries:', testSeries._id.toString());
+        } catch (err) {
+          console.warn('[Upload] Auto-create placeholder TestSeries failed:', err.message);
+          // If creation fails, fall back to storing shorthand id
+          actualTestSeriesId = testSeriesId.toLowerCase();
+        }
+      } else {
+        // Normalize shorthand to lowercase for consistency
+        actualTestSeriesId = testSeriesId.toLowerCase();
+      }
     }
 
     // Check authorization - if testSeries exists, check ownership

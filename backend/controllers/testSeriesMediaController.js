@@ -4,6 +4,7 @@ import path from 'path';
 import mongoose from 'mongoose';
 import TestSeries from '../models/TestSeries.js';
 import TestSeriesMedia from '../models/TestSeriesMedia.js';
+import Category from '../models/Category.js';
 
 /**
  * Upload media file for test series (video, image, etc.)
@@ -168,26 +169,24 @@ export const uploadTestSeriesMedia = async (req, res) => {
           await session.abortTransaction();
           console.error('Transaction failed when saving media metadata:', txErr);
 
-          // As a fallback, attempt the previous cleanup+retry approach
-          if (txErr && (txErr.code === 11000 || (txErr.errorResponse && txErr.errorResponse.code === 11000))) {
-            try {
-              await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' });
-              const retryMedia = new TestSeriesMedia({
-                testSeriesId,
-                mediaType,
-                fileId: response.$id,
-                fileUrl,
-                fileName: originalname,
-                fileSize: size,
-                mimeType: mimetype,
-                uploadedBy: req.user._id,
-                status: 'active',
-              });
-              await retryMedia.save();
-              console.log('Fallback retry successful after transaction failure');
-            } catch (retryErr) {
-              console.error('Fallback retry also failed:', retryErr);
-            }
+          // As a fallback, attempt the previous cleanup+retry approach for ALL transaction failures
+          try {
+            await TestSeriesMedia.deleteMany({ testSeriesId, mediaType, status: 'archived' });
+            const retryMedia = new TestSeriesMedia({
+              testSeriesId,
+              mediaType,
+              fileId: response.$id,
+              fileUrl,
+              fileName: originalname,
+              fileSize: size,
+              mimeType: mimetype,
+              uploadedBy: req.user._id,
+              status: 'active',
+            });
+            await retryMedia.save();
+            console.log('Fallback retry successful after transaction failure');
+          } catch (retryErr) {
+            console.error('Fallback retry also failed:', retryErr);
           }
         } finally {
           session.endSession();
@@ -214,12 +213,44 @@ export const uploadTestSeriesMedia = async (req, res) => {
 
         let testSeries = await TestSeries.findOne(query);
         
-        // Don't try to create with invalid _id - just log and continue
+        // If TestSeries is missing for shorthand (S1..S4), auto-create a placeholder so uploads attach cleanly
         if (!testSeries) {
           console.warn(`TestSeries not found with query:`, query);
-        } else {
+          // Only auto-create when seriesType is recognized (e.g., 'S1', 'S2', ...)
+          if (query.seriesType && typeof query.seriesType === 'string' && /^S[1-4]$/.test(query.seriesType)) {
+            try {
+              // Ensure placeholder category exists
+              let category = await Category.findOne({ slug: 'auto-testseries' });
+              if (!category) {
+                category = await Category.create({ name: 'Auto TestSeries Category', slug: 'auto-testseries', description: 'Auto-created category for placeholder TestSeries' });
+              }
+
+              const seriesTypeLabelMap = { 'S1': 'Full Syllabus', 'S2': '50% Syllabus', 'S3': '30% Syllabus', 'S4': 'CA Successful Specials' };
+
+              const placeholderData = {
+                title: `${query.seriesType} Test Series (Auto-created)`,
+                description: `Auto-created placeholder for ${query.seriesType}`,
+                seriesType: query.seriesType,
+                seriesTypeLabel: seriesTypeLabelMap[query.seriesType] || 'Full Syllabus',
+                category: category._id,
+                pricing: {},
+                subjects: ['FR','AFM','Audit','DT','IDT'],
+                createdBy: req.user?._id || null,
+                publishStatus: 'published',
+                isActive: true,
+              };
+              testSeries = await TestSeries.create(placeholderData);
+              console.log('Auto-created placeholder TestSeries:', testSeries._id.toString());
+            } catch (createErr) {
+              console.error('Failed to auto-create placeholder TestSeries:', createErr);
+            }
+          }
+        }
+
+        // If we now have a TestSeries doc, try to save the media info there
+        if (testSeries) {
           // Check if user has permission (creator or admin)
-          if (testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+          if (testSeries.createdBy && testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
             console.warn('User does not have permission to update test series');
           } else {
             if (mediaType === 'video') {
@@ -229,7 +260,11 @@ export const uploadTestSeriesMedia = async (req, res) => {
             } else if (mediaType === 'image') {
               testSeries.thumbnail = fileUrl;
             }
-            await testSeries.save();
+            try {
+              await testSeries.save();
+            } catch (saveErr) {
+              console.error('Error saving testSeries after media upload:', saveErr);
+            }
           }
         }
       } catch (dbError) {

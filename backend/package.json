@@ -9,7 +9,7 @@
     "dev": "nodemon server.js",
     "seed": "node scripts/seedUsers.js",
     "create-admin": "node scripts/createAdmin.js",
-    "test": "jest --runInBand"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand"
   
   },
   "keywords": [
