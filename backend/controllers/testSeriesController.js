@@ -337,15 +337,26 @@ export const getTestSeriesById = async (req, res) => {
 // @access  Public
 export const getFixedSeriesOverrides = async (req, res) => {
   try {
+    console.log('[FixedOverrides] Request from:', req.ip || req.headers['x-forwarded-for'] || 'unknown');
+
     const fixedIds = ['S1', 'S2', 'S3', 'S4'];
-    const docs = await TestSeries.find({ seriesType: { $in: fixedIds } }).select('seriesType thumbnail title description isActive createAt updatedAt');
+    const docs = await TestSeries.find({ seriesType: { $in: fixedIds } }).select('seriesType thumbnail title description isActive createdAt updatedAt');
+
+    // Determine base URL - prefer BACKEND_URL env, else derive from request
+    let base = (process.env.BACKEND_URL || '').replace(/\/$/, '');
+    if (!base) {
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+      const host = req.get('host');
+      base = `${protocol}://${host}`;
+    }
+
+    console.log('[FixedOverrides] Using base URL:', base);
 
     const map = {};
     for (const s of docs) {
       const key = s.seriesType.toLowerCase();
       let thumbnail = s.thumbnail;
       if (thumbnail && typeof thumbnail === 'string' && /\/storage\/buckets\//.test(thumbnail)) {
-        const base = (process.env.BACKEND_URL || '').replace(/\/$/, '');
         thumbnail = `${base}/api/files/public?fileUrl=${encodeURIComponent(thumbnail)}`;
       }
       map[key] = {
@@ -358,6 +369,7 @@ export const getFixedSeriesOverrides = async (req, res) => {
       };
     }
 
+    console.log('[FixedOverrides] Prepared overrides for:', Object.keys(map));
     return res.json({ success: true, overrides: map });
   } catch (error) {
     console.error('getFixedSeriesOverrides error', error);
