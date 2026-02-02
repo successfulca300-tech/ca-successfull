@@ -228,6 +228,8 @@ export const publicFileProxy = async (req, res) => {
       'X-Appwrite-Project': APPWRITE_PROJECT_ID,
     };
 
+    console.log('[PublicProxy] Fetching Appwrite URL for public file', { fileId, fileUrl, url });
+
     const fetchRes = await fetch(url, { headers });
     if (!fetchRes.ok) {
       const status = fetchRes.status;
@@ -241,6 +243,7 @@ export const publicFileProxy = async (req, res) => {
 
     const contentType = fetchRes.headers.get('content-type') || 'application/octet-stream';
     const buffer = Buffer.from(await fetchRes.arrayBuffer());
+    console.log('[PublicProxy] Serving file response, content-type:', contentType, 'bytes:', buffer.length);
     res.set('Content-Type', contentType);
     res.send(buffer);
   } catch (err) {
