@@ -11,6 +11,7 @@ import {
   deleteTestSeries,
   publishTestSeries,
   calculatePricing,
+  getFixedSeriesOverrides,
 } from '../controllers/testSeriesController.js';
 import {
   uploadPaper,
