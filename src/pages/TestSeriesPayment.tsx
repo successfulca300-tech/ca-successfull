@@ -4,7 +4,7 @@ import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { testSeriesAPI, enrollmentsAPI } from "@/lib/api";
+import { testSeriesAPI } from "@/lib/api";
 
 const TestSeriesPayment = () => {
   const { id } = useParams<{ id: string }>();
@@ -44,7 +44,7 @@ const TestSeriesPayment = () => {
       // If error indicates already enrolled, verify via API and proceed gracefully
       if (err.message && (err.message.includes('Already purchased') || err.message.includes('already enrolled') || err.message.includes('Already'))) {
         try {
-          const check: any = await enrollmentsAPI.checkEnrollment({ testSeriesId: series._id });
+          const check: any = await (await import('@/lib/api')).enrollmentsAPI.checkEnrollment({ testSeriesId: series._id });
           if (check && check.enrolled) {
             toast.info('You are already enrolled. Redirecting to Dashboard.');
             navigate('/dashboard?tab=test-series');

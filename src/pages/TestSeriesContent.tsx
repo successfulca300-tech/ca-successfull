@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { CheckCircle, Award, Users, FileText, Clock, Upload, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
-import { FIXED_TEST_SERIES } from '@/data/fixedTestSeries';
 
 // CourseDocument component for displaying documents inline
 const CourseDocument = ({ src, testSeriesId, title, isVisible }: { src: string; testSeriesId?: string; title: string; isVisible: boolean }) => {
@@ -131,6 +130,7 @@ const TestSeriesContent = () => {
         } catch (err: any) {
           console.error('Error fetching test series:', err);
           // If test series not found, try to use fixed test series data
+          const { FIXED_TEST_SERIES } = await import('@/data/fixedTestSeries');
           const fixedSeries = FIXED_TEST_SERIES.find(s => s._id === id.toLowerCase());
           if (fixedSeries) {
             setSeries(fixedSeries);

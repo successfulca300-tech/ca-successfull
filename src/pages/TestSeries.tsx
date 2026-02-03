@@ -23,22 +23,17 @@ const TestSeries = () => {
     }
   }, []);
 
-  // Fetched details from backend to prefer DB thumbnails when available
-  const [fetchedSeriesMap, setFetchedSeriesMap] = useState<Record<string, any>>({});
-
   // Set displayed series (active ones, sorted by displayOrder)
   useEffect(() => {
     const activeSeries = FIXED_TEST_SERIES
       .map((series, index) => {
         const managed = managedData[series._id] || {};
-        const fetched = fetchedSeriesMap[series._id] || {};
         return {
           ...series,
-          title: fetched.title || managed.cardTitle || managed.title || series.title,
-          description: fetched.description || managed.cardDescription || managed.description || series.description,
-          // Prefer fetched DB thumbnail (created by subadmin) over managed or fixed
-          thumbnail: fetched.thumbnail || managed.cardThumbnail || series.thumbnail,
-          isActive: fetched.isActive !== undefined ? fetched.isActive : (managed.isActive !== false), // If backend says active, prefer it
+          title: managed.cardTitle || managed.title || series.title,
+          description: managed.cardDescription || managed.description || series.description,
+          thumbnail: managed.cardThumbnail || series.thumbnail,
+          isActive: managed.isActive !== false, // Default to true
           displayOrder: managed.displayOrder !== undefined ? managed.displayOrder : index,
         };
       })
@@ -46,26 +41,7 @@ const TestSeries = () => {
       .sort((a, b) => a.displayOrder - b.displayOrder);
 
     setDisplayedSeries(activeSeries);
-  }, [managedData, fetchedSeriesMap]);
-
-  // Load DB overrides (thumbnail etc.) for fixed series (s1..s4) in a single call
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/g, '')}/api/testseries/fixed-overrides`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!mounted) return;
-        if (data && data.overrides) {
-          setFetchedSeriesMap(data.overrides);
-        }
-      } catch (e) {
-        console.error('Failed to fetch fixed test series overrides', e);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+  }, [managedData]);
 
   const handleViewDetails = (test: any) => navigate(`/testseries/${test._id}`);
 
@@ -122,7 +98,9 @@ const TestSeries = () => {
                   {/* Card Footer - Price & Button */}
                   <div className="p-4 space-y-4">
                     <div>
-                     
+                      <p className="text-2xl font-bold text-gray-900">
+                        ₹{test.price.toLocaleString()}
+                      </p>
                     </div>
 
                     <Button

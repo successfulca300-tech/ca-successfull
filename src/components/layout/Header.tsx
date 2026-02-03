@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronDown, ShoppingCart, Menu, X, Youtube, Send, Phone, Linkedin, Instagram, LogOut, User, Settings, LayoutDashboard, MapPin } from "lucide-react";
-
+import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { cartAPI } from "@/lib/api";
@@ -107,7 +107,7 @@ const Header = () => {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex-shrink-0">
-              <img src="/src/assets/logo.svg" alt="CA Successful" className="h-16 object-contain" />
+              <img src={logo} alt="CA Successful" className="h-16 object-contain" />
             </Link>
 
             {/* Desktop Navigation */}

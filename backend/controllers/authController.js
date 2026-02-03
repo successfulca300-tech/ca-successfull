@@ -47,13 +47,7 @@ export const register = async (req, res) => {
 
     console.log('User created with OTP:', user.emailOTP);
 
-    try {
-      await sendOTPEmail(user.email, otp);
-    } catch (emailError) {
-      console.warn('Warning: Failed to send OTP email:', emailError.message);
-      // Continue anyway - email is optional for signup flow
-      // In production, you might want to retry or notify admin
-    }
+    await sendOTPEmail(user.email, otp);
 
     res.status(201).json({
       message: 'Registration successful. Please verify your email.',

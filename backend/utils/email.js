@@ -1,29 +1,11 @@
 import SibApiV3Sdk from 'sib-api-v3-sdk';
 
 const sendOTPEmail = async (email, otp) => {
-  // Basic validation
-  if (!process.env.BREVO_API_KEY) {
-    console.error('BREVO_API_KEY is not set in environment variables');
-    throw new Error('BREVO_API_KEY is not configured');
-  }
-  if (!process.env.BREVO_SENDER_EMAIL) {
-    console.error('BREVO_SENDER_EMAIL is not set in environment variables');
-    throw new Error('BREVO_SENDER_EMAIL is not configured');
-  }
-
   try {
     // Configure Brevo API
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
     const apiKey = defaultClient.authentications['api-key'];
     apiKey.apiKey = process.env.BREVO_API_KEY;
-
-    // Log presence of key (masked) for debugging
-    try {
-      const k = process.env.BREVO_API_KEY;
-      console.log(`BREVO_API_KEY present (length=${k.length}) and startsWith xsmtp: ${k.startsWith('xsmtpsib')}`);
-    } catch (e) {
-      // ignore
-    }
 
     const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
@@ -44,11 +26,6 @@ const sendOTPEmail = async (email, otp) => {
     await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log('OTP email sent successfully via Brevo to:', email);
   } catch (error) {
-    // Improve error message with upstream response when available
-    if (error && error.response && error.response.body) {
-      console.error('Brevo API error response:', error.response.body);
-      throw new Error(`Brevo API error: ${error.response.body.message || JSON.stringify(error.response.body)}`);
-    }
     console.error('Error sending OTP email via Brevo:', error);
     throw new Error('Failed to send OTP email');
   }

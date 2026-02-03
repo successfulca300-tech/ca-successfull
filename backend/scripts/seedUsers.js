@@ -13,26 +13,26 @@ const seedUsers = async () => {
 
     // Clear existing admin and subadmin users with these specific emails
     await User.deleteMany({ 
-      email: { $in: ['nisank123456@gmail.com', 'kurmisachin833@gmail.com'] } 
+      email: { $in: ['dharmendrasingh98939@gmail.com', 'kurmisachin833@gmail.com'] } 
     });
-    console.log(' Cleared existing admin and subadmin users');
+    console.log('🗑️  Cleared existing admin and subadmin users');
 
     // Create Admin User
-    const adminEmail = 'nisank123456@gmail.com';
+    const adminEmail = 'dharmendrasingh98939@gmail.com';
     const adminExists = await User.findOne({ email: adminEmail });
 
     if (!adminExists) {
       // Don't hash password here - let the pre-save hook handle it
       const admin = await User.create({
-        name:'Nj',
+        name: 'Dharmendra Singh',
         email: adminEmail,
         password: 'admin123', // Plain password - will be hashed by pre-save hook
         role: 'admin',
         isActive: true,
       });
       console.log('✅ Admin user created:');
-      console.log(`Email: ${adminEmail}`);
-      console.log(`Password: admin123`);
+      console.log(`   Email: ${adminEmail}`);
+      console.log(`   Password: admin123`);
     } else {
       console.log('⚠️  Admin user already exists');
     }

@@ -6,7 +6,7 @@
 import { initializeAppwrite } from '../config/appwrite.js';
 import { InputFile, Permission, Role } from 'node-appwrite';
 
-const PAPERS_BUCKET_ID = process.env.APPWRITE_BUCKET_ID || process.env.APPWRITE_PAPERS_BUCKET_ID || '695d5298000b5765bc66';
+const PAPERS_BUCKET_ID = process.env.APPWRITE_BUCKET_ID || process.env.APPWRITE_PAPERS_BUCKET_ID || '693adb15001787a85335';
 
 /**
  * Upload file to Appwrite Storage

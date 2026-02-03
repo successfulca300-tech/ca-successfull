@@ -12,22 +12,22 @@ const createAdmin = async () => {
     console.log('MongoDB Connected');
 
     // Check if admin already exists
-    const adminEmail = 'nisank123456@gmail.com';
+    const adminEmail = 'sachin123@gmail.com';
     const adminExists = await User.findOne({ email: adminEmail });
 
     if (adminExists) {
       // Update existing user to admin if not already
       if (adminExists.role !== 'admin') {
         adminExists.role = 'admin';
-        adminExists.name = 'Ni';
-        if (adminExists.password !== 'admin123') {
-          adminExists.password = 'admin123'; // Will be hashed by pre-save hook
+        adminExists.name = 'Sachin';
+        if (adminExists.password !== 'sachin123') {
+          adminExists.password = 'sachin123'; // Will be hashed by pre-save hook
         }
         await adminExists.save();
         console.log('✅ Updated existing user to admin:');
-        console.log(`   Name: Ni`);
+        console.log(`   Name: Sachin`);
         console.log(`   Email: ${adminEmail}`);
-        console.log(`   Password: admin123`);
+        console.log(`   Password: sachin123`);
       } else {
         console.log('⚠️  Admin user already exists with this email');
       }

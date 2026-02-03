@@ -1,6 +1,5 @@
 import TestSeriesPaper from '../models/TestSeriesPaper.js';
 import TestSeries from '../models/TestSeries.js';
-import Category from '../models/Category.js';
 import { validationResult } from 'express-validator';
 import { uploadFileToAppwrite, deleteFileFromAppwrite } from '../utils/appwriteFileService.js';
 import fs from 'fs';
@@ -134,40 +133,8 @@ export const uploadPaper = async (req, res) => {
     // If still not found, accept shorthand format (s1, s2, etc) for frontend-generated IDs
     if (!testSeries) {
       console.log('[Upload] No TestSeries document found, using provided ID as shorthand:', testSeriesId);
-      // Try to auto-create a placeholder TestSeries for recognized series types (S1..S4)
-      const seriesTypeCandidate = testSeriesId.toUpperCase();
-      if (/^S[1-4]$/.test(seriesTypeCandidate)) {
-        try {
-          let category = await Category.findOne({ slug: 'auto-testseries' });
-          if (!category) {
-            category = await Category.create({ name: 'Auto TestSeries Category', slug: 'auto-testseries', description: 'Auto-created category for placeholder TestSeries' });
-          }
-          const seriesTypeLabelMap = { 'S1': 'Full Syllabus', 'S2': '50% Syllabus', 'S3': '30% Syllabus', 'S4': 'CA Successful Specials' };
-
-          const placeholderData = {
-            title: `${seriesTypeCandidate} Test Series (Auto-created)`,
-            description: `Auto-created placeholder for ${seriesTypeCandidate}`,
-            seriesType: seriesTypeCandidate,
-            seriesTypeLabel: seriesTypeLabelMap[seriesTypeCandidate] || 'Full Syllabus',
-            category: category._id,
-            pricing: {},
-            subjects: ['FR','AFM','Audit','DT','IDT'],
-            createdBy: req.user?._id || null,
-            publishStatus: 'published',
-            isActive: true,
-          };
-          testSeries = await TestSeries.create(placeholderData);
-          actualTestSeriesId = testSeries._id.toString();
-          console.log('[Upload] Auto-created placeholder TestSeries:', testSeries._id.toString());
-        } catch (err) {
-          console.warn('[Upload] Auto-create placeholder TestSeries failed:', err.message);
-          // If creation fails, fall back to storing shorthand id
-          actualTestSeriesId = testSeriesId.toLowerCase();
-        }
-      } else {
-        // Normalize shorthand to lowercase for consistency
-        actualTestSeriesId = testSeriesId.toLowerCase();
-      }
+      // Normalize shorthand to lowercase for consistency
+      actualTestSeriesId = testSeriesId.toLowerCase();
     }
 
     // Check authorization - if testSeries exists, check ownership
@@ -230,8 +197,6 @@ export const uploadPaper = async (req, res) => {
       fileSizeBytes: fileBuffer.length,
       availabilityDate: availabilityDate || new Date(),
       isAvailable: true,
-      publishStatus: 'published', // Subadmin uploads are auto-published by default
-      isVisibleToUsers: true,
       createdBy: req.user._id,
     });
 
@@ -286,25 +251,12 @@ export const getPapersByTestSeries = async (req, res) => {
     
     // Use ID as-is for query (both shorthand and ObjectId should work)
     let queryId = testSeries ? testSeries._id.toString() : testSeriesId;
-
     // Normalize shorthand to lowercase for consistency with upload
     if (!testSeries && testSeriesId) {
       queryId = testSeriesId.toLowerCase();
     }
 
-    // Build candidate ids to match stored paper.testSeriesId values (ObjectId or shorthand)
-    const candidatePaperIds = [queryId];
-    if (!mongoose.Types.ObjectId.isValid(queryId)) {
-      const tsDoc = await TestSeries.findOne({ seriesType: queryId.toUpperCase() });
-      if (tsDoc) candidatePaperIds.push(tsDoc._id.toString());
-    } else {
-      const tsDoc = await TestSeries.findById(queryId);
-      if (tsDoc && tsDoc.seriesType) candidatePaperIds.push(tsDoc.seriesType.toLowerCase());
-    }
-
-    const uniqueCandidatePaperIds = Array.from(new Set(candidatePaperIds));
-
-    const query = { testSeriesId: { $in: uniqueCandidatePaperIds }, publishStatus: 'published', isVisibleToUsers: true };
+    const query = { testSeriesId: queryId };
 
     if (group) query.group = group;
     if (subject) query.subject = subject;
@@ -352,34 +304,17 @@ export const getPapersGroupedBySubject = async (req, res) => {
     }
 
     // CRITICAL ACCESS CONTROL: Check enrollment and get purchased subjects
-    // Use normalized testSeriesId but also allow matching alternate representations (ObjectId vs shorthand)
+    // Use normalized testSeriesId
     const Enrollment = (await import('../models/Enrollment.js')).default;
-
-    // Build candidate ids to match enrollment entries reliably
-    const candidateEnrollmentIds = [normalizedTestSeriesId];
-
-    // If normalizedTestSeriesId is NOT an ObjectId, try to find a TestSeries doc with matching seriesType
-    if (!mongoose.Types.ObjectId.isValid(normalizedTestSeriesId)) {
-      const tsDoc = await TestSeries.findOne({ seriesType: normalizedTestSeriesId.toUpperCase() });
-      if (tsDoc) candidateEnrollmentIds.push(tsDoc._id.toString());
-    } else {
-      // If it is an ObjectId, also try to add shorthand (s1, s2...) if seriesType exists
-      const tsDoc = await TestSeries.findById(normalizedTestSeriesId);
-      if (tsDoc && tsDoc.seriesType) candidateEnrollmentIds.push(tsDoc.seriesType.toLowerCase());
-    }
-
-    // Deduplicate
-    const uniqueCandidateEnrollmentIds = Array.from(new Set(candidateEnrollmentIds));
-
     const enrollments = await Enrollment.find({
       userId: userId,
-      testSeriesId: { $in: uniqueCandidateEnrollmentIds },
+      testSeriesId: normalizedTestSeriesId,
       paymentStatus: 'paid'
     });
 
     // If no paid enrollment, return empty papers
     if (!enrollments || enrollments.length === 0) {
-      console.log(`[Access Control] No paid enrollment found for user ${userId} on series ${normalizedTestSeriesId} - checked IDs: ${uniqueCandidateEnrollmentIds}`);
+      console.log(`[Access Control] No paid enrollment found for user ${userId} on series ${normalizedTestSeriesId}`);
       return res.json({ success: true, papers: {} });
     }
 
@@ -415,27 +350,15 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     console.log(`[Access Control] Extracted unique subjects:`, Array.from(uniqueSubjects));
 
-    // Query papers using the normalized testSeriesId format but also accept alternate representations
-    // Build candidate paper IDs similar to enrollment check
-    const candidatePaperIds = [normalizedTestSeriesId];
-    if (!mongoose.Types.ObjectId.isValid(normalizedTestSeriesId)) {
-      const tsDoc = await TestSeries.findOne({ seriesType: normalizedTestSeriesId.toUpperCase() });
-      if (tsDoc) candidatePaperIds.push(tsDoc._id.toString());
-    } else {
-      const tsDoc = await TestSeries.findById(normalizedTestSeriesId);
-      if (tsDoc && tsDoc.seriesType) candidatePaperIds.push(tsDoc.seriesType.toLowerCase());
-    }
-
-    const uniqueCandidatePaperIds = Array.from(new Set(candidatePaperIds));
-
-    const query = { testSeriesId: { $in: uniqueCandidatePaperIds }, isAvailable: true, publishStatus: 'published', isVisibleToUsers: true, subject: { $in: Array.from(uniqueSubjects) } };
+    // Query papers using the normalized testSeriesId format
+    const query = { testSeriesId: normalizedTestSeriesId, isAvailable: true, subject: { $in: Array.from(uniqueSubjects) } };
 
     if (group) query.group = group;
     if (series) query.series = series;
 
     console.log('[Access Control] Querying papers with:', query);
 
-    // Use the set of candidate testSeriesIds for paper lookup
+    // Use the normalized testSeriesId for paper lookup
     const papers = await TestSeriesPaper.find(query)
       .populate('createdBy', 'name')
       .sort({ subject: 1, paperType: 1, paperNumber: 1, createdAt: 1 });

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "@/components/layout/Layout";
-import { coursesAPI, enrollmentsAPI, filesAPI, resourcesAPI } from "@/lib/api";
+import { coursesAPI, enrollmentsAPI, filesAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -437,7 +437,7 @@ const CourseContent = () => {
         // Regardless of how we obtained the course, fetch Resource documents linked to this course
         // (subadmins may upload Resources separately and link them via `courseId` field).
         try {
-          const resResources: any = await resourcesAPI.getAll({ courseId: id, limit: 100 });
+          const resResources: any = await (await import('@/lib/api')).resourcesAPI.getAll({ courseId: id, limit: 100 });
           const linkedResources = resResources?.resources || [];
           // Merge unique resources into course.resources array
           setCourse((prev: any) => {

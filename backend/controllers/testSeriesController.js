@@ -308,71 +308,12 @@ export const getTestSeriesById = async (req, res) => {
       }
     }
 
-    // If thumbnail is an Appwrite URL, proxy it through backend so browser does not need Appwrite headers
-    try {
-      const thumbnail = testSeries.thumbnail;
-      if (thumbnail && typeof thumbnail === 'string' && /\/storage\/buckets\//.test(thumbnail)) {
-        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-        const host = req.get('host');
-        const baseFromReq = `${protocol}://${host}`;
-        const base = (process.env.BACKEND_URL || baseFromReq).replace(/\/$/, '');
-        testSeries.thumbnail = `${base}/api/files/public?fileUrl=${encodeURIComponent(thumbnail)}`;
-      }
-    } catch (e) {
-      console.warn('Failed to proxify thumbnail URL for testSeries', e.message);
-    }
-
     res.json({ success: true, testSeries });
   } catch (error) {
     console.error(error);
     if (error.name === 'CastError') {
       return res.status(404).json({ success: false, message: 'Test series not found' });
     }
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
-// @desc    Get overrides for fixed test series (s1..s4)
-// @route   GET /api/testseries/fixed-overrides
-// @access  Public
-export const getFixedSeriesOverrides = async (req, res) => {
-  try {
-    console.log('[FixedOverrides] Request from:', req.ip || req.headers['x-forwarded-for'] || 'unknown');
-
-    const fixedIds = ['S1', 'S2', 'S3', 'S4'];
-    const docs = await TestSeries.find({ seriesType: { $in: fixedIds } }).select('seriesType thumbnail title description isActive createdAt updatedAt');
-
-    // Determine base URL - prefer BACKEND_URL env, else derive from request
-    let base = (process.env.BACKEND_URL || '').replace(/\/$/, '');
-    if (!base) {
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-      const host = req.get('host');
-      base = `${protocol}://${host}`;
-    }
-
-    console.log('[FixedOverrides] Using base URL:', base);
-
-    const map = {};
-    for (const s of docs) {
-      const key = s.seriesType.toLowerCase();
-      let thumbnail = s.thumbnail;
-      if (thumbnail && typeof thumbnail === 'string' && /\/storage\/buckets\//.test(thumbnail)) {
-        thumbnail = `${base}/api/files/public?fileUrl=${encodeURIComponent(thumbnail)}`;
-      }
-      map[key] = {
-        id: s._id.toString(),
-        seriesType: s.seriesType,
-        title: s.title,
-        description: s.description,
-        thumbnail,
-        isActive: s.isActive,
-      };
-    }
-
-    console.log('[FixedOverrides] Prepared overrides for:', Object.keys(map));
-    return res.json({ success: true, overrides: map });
-  } catch (error) {
-    console.error('getFixedSeriesOverrides error', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };

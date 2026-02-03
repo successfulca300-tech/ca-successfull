@@ -31,26 +31,10 @@ import testSeriesAnswerRoutes from './routes/testSeriesAnswerRoutes.js';
 // Load env
 dotenv.config();
 
-console.log('='.repeat(60));
-console.log('BACKEND SERVER STARTING');
-console.log('='.repeat(60));
-console.log(`Node Environment: ${process.env.NODE_ENV || 'development'}`);
-console.log(`Node Version: ${process.version}`);
-console.log(`Timestamp: ${new Date().toISOString()}`);
-console.log(`Current Working Directory: ${process.cwd()}`);
-console.log('='.repeat(60));
+// DB connect
+connectDB();
 
-// Create Express app
 const app = express();
-
-// Connect to DB in background (don't block server startup)
-console.log('Attempting to connect to MongoDB...');
-connectDB()
-  .then(() => console.log('✅ MongoDB connection established'))
-  .catch(err => {
-    console.error('❌ MongoDB connection failed. Server will still run but DB operations will fail.');
-    console.error('Error:', err.message);
-  });
 
 // Simple request logger for debugging route issues in deployments
 app.use((req, res, next) => {
@@ -203,33 +187,7 @@ app.use((err, req, res, next) => {
    Server Start
 ================================ */
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || '0.0.0.0';
 
-const server = app.listen(PORT, HOST, () => {
-  console.log('');
-  console.log('='.repeat(60));
-  console.log(`✅ SERVER READY`);
-  console.log(`🚀 Running on: http://${HOST}:${PORT}`);
-  console.log(`📍 Health: http://${HOST}:${PORT}/api/health`);
-  console.log('='.repeat(60));
-  console.log('');
-});
-
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    console.log('HTTP server closed');
-    process.exit(0);
-  });
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION at:', promise, 'reason:', reason);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });

@@ -59,34 +59,17 @@ export const createOrder = async (req, res) => {
     };
     if (resourceType === 'course') createObj.courseId = resourceId;
     if (resourceType === 'testseries') {
-      // Prefer storing the canonical TestSeries._id in the enrollment when possible
-      let resolvedTestSeries = null;
-      if (resourceId && mongoose.Types.ObjectId.isValid(resourceId)) {
-        resolvedTestSeries = await TestSeries.findById(resourceId);
+      // Normalize shorthand IDs to lowercase for consistency with paper storage
+      // If it looks like a shorthand (s1, s2, etc), normalize to lowercase
+      let normalizedTestSeriesId = resourceId;
+      if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
+        // It's not an ObjectId, so it's likely shorthand - normalize to lowercase
+        normalizedTestSeriesId = resourceId.toLowerCase();
       }
-      if (!resolvedTestSeries) {
-        try {
-          const seriesType = String(resourceId).toUpperCase();
-          resolvedTestSeries = await TestSeries.findOne({ seriesType });
-        } catch (e) {
-          // Ignore and fallback to shorthand
-        }
-      }
-
-      if (resolvedTestSeries) {
-        createObj.testSeriesId = resolvedTestSeries._id;
-        console.log('[Payment] Storing canonical TestSeries._id in enrollment:', resolvedTestSeries._id.toString());
-      } else {
-        // Normalize shorthand IDs to lowercase for consistency with paper storage
-        let normalizedTestSeriesId = resourceId;
-        if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
-          // It's not an ObjectId, so it's likely shorthand - normalize to lowercase
-          normalizedTestSeriesId = resourceId.toLowerCase();
-        }
-        createObj.testSeriesId = normalizedTestSeriesId;
-        console.log('[Payment] Storing testSeriesId in enrollment:', normalizedTestSeriesId, '(original was:', resourceId, ')');
-      }
-
+      
+      createObj.testSeriesId = normalizedTestSeriesId;
+      console.log('[Payment] Storing testSeriesId in enrollment:', normalizedTestSeriesId, '(original was:', resourceId, ')');
+      
       if (purchasedSubjects && Array.isArray(purchasedSubjects) && purchasedSubjects.length > 0) {
         createObj.purchasedSubjects = purchasedSubjects;
         console.log('[Payment] Saving purchasedSubjects to enrollment:', purchasedSubjects);

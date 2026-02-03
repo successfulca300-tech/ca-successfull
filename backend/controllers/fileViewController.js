@@ -160,16 +160,7 @@ export const proxyFileView = async (req, res) => {
     }
 
     // Use global fetch (Node 18+). Do not require external node-fetch dependency.
-    // Build headers. Appwrite requires both project header and key when using API key.
-    const headers = {};
-    if (APPWRITE_API_KEY) {
-      headers['X-Appwrite-Key'] = APPWRITE_API_KEY;
-      if (process.env.APPWRITE_PROJECT_ID) {
-        headers['X-Appwrite-Project'] = process.env.APPWRITE_PROJECT_ID;
-      }
-    }
-
-    const fetchRes = await fetch(url, { headers });
+    const fetchRes = await fetch(url, { headers: APPWRITE_API_KEY ? { 'X-Appwrite-Key': APPWRITE_API_KEY } : {} });
     if (!fetchRes.ok) {
       const status = fetchRes.status;
       let detail = '';
@@ -189,65 +180,6 @@ export const proxyFileView = async (req, res) => {
     res.send(buffer);
   } catch (err) {
     console.error('proxyFileView error', err);
-    const html = htmlPage('Server error', 'Unable to proxy the file. Please try again later.');
-    res.status(500).set('Content-Type', 'text/html').send(html);
-  }
-};
-
-// Public proxy for Appwrite files (no auth). Use for thumbnails and public previews.
-export const publicFileProxy = async (req, res) => {
-  try {
-    const { fileId, fileUrl } = req.query || {};
-
-    if (!fileId && !fileUrl) {
-      return res.status(400).json({ message: 'fileId or fileUrl query parameter required' });
-    }
-
-    const APPWRITE_API_KEY = process.env.APPWRITE_API_KEY;
-    const APPWRITE_ENDPOINT = process.env.APPWRITE_ENDPOINT;
-    const APPWRITE_PROJECT_ID = process.env.APPWRITE_PROJECT_ID;
-    const APPWRITE_BUCKET_ID = process.env.APPWRITE_BUCKET_ID;
-
-    if (!APPWRITE_ENDPOINT || !APPWRITE_PROJECT_ID || !APPWRITE_API_KEY || !APPWRITE_BUCKET_ID) {
-      const html = htmlPage('Server configuration error', 'Storage is not configured on the server. Please contact the site administrator.');
-      return res.status(500).set('Content-Type', 'text/html').send(html);
-    }
-
-    let url;
-    if (fileUrl) {
-      url = fileUrl;
-    } else {
-      const sanitizedFileId = isValidFileId(fileId) ? fileId : sanitizeFileId(fileId);
-      const _base = APPWRITE_ENDPOINT.replace(/\/$/, '');
-      const endpointWithV1 = _base.endsWith('/v1') ? _base : `${_base}/v1`;
-      url = `${endpointWithV1}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${sanitizedFileId}/view?project=${APPWRITE_PROJECT_ID}`;
-    }
-
-    const headers = {
-      'X-Appwrite-Key': APPWRITE_API_KEY,
-      'X-Appwrite-Project': APPWRITE_PROJECT_ID,
-    };
-
-    console.log('[PublicProxy] Fetching Appwrite URL for public file', { fileId, fileUrl, url });
-
-    const fetchRes = await fetch(url, { headers });
-    if (!fetchRes.ok) {
-      const status = fetchRes.status;
-      let detail = '';
-      try { detail = await fetchRes.text(); } catch (e) { detail = String(e); }
-      console.error('Appwrite public file fetch failed', { url, status, detail });
-      const message = status === 404 ? 'The requested file was not found.' : 'Failed to fetch file from storage.';
-      const html = `<!doctype html><html><head><meta charset="utf-8"><title>File not available</title></head><body style="font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#0f172a;"><div style="max-width:720px;padding:28px;border-radius:8px;background:#fff;border:1px solid #e6edf3;box-shadow:0 6px 24px rgba(2,6,23,0.04);"><h1 style="margin:0 0 8px;font-size:20px">File not available</h1><p style="margin:0 0 12px;color:#475569">${message} Please verify the file exists and try again. If the problem persists, contact support.</p><p style="margin:0;font-size:13px;color:#94a3b8">Status: ${status}</p></div></body></html>`;
-      return res.status(status === 404 ? 404 : 502).set('Content-Type', 'text/html').send(html);
-    }
-
-    const contentType = fetchRes.headers.get('content-type') || 'application/octet-stream';
-    const buffer = Buffer.from(await fetchRes.arrayBuffer());
-    console.log('[PublicProxy] Serving file response, content-type:', contentType, 'bytes:', buffer.length);
-    res.set('Content-Type', contentType);
-    res.send(buffer);
-  } catch (err) {
-    console.error('publicFileProxy error', err);
     const html = htmlPage('Server error', 'Unable to proxy the file. Please try again later.');
     res.status(500).set('Content-Type', 'text/html').send(html);
   }

@@ -229,32 +229,30 @@ const SubAdminDashboard = () => {
           console.warn('Failed to load categories from API', err);
         }
 
-        // Fetch publish requests for current user (only if authenticated)
-        if (user) {
-          const requestsData = await publishRequestAPI.getForUser({});
-          if (requestsData && requestsData.requests) {
-            // Enrich requests with content title from resources
-            const enrichedRequests = requestsData.requests.map((req: any) => {
-              const resource = resourcesData?.resources?.find((r: Resource) => r._id === req.contentId);
-              return {
-                ...req,
-                title: req.content?.title || resource?.title || 'Unknown',
-                thumbnail: resource?.thumbnail,
-                requestedOn: req.createdAt,
-              };
-            });
-            setRequests(enrichedRequests);
-            // Fetch courses for course content tab
-            try {
-              const coursesData = await coursesAPI.getAll({ limit: 100 });
-              if (coursesData && (coursesData.courses || coursesData.courses === undefined)) {
-                // API returns `{ courses }` or directly array depending on backend; normalize
-                const list = coursesData.courses || coursesData;
-                setCourses(list || []);
-              }
-            } catch (err) {
-              console.warn('Failed to load courses for subadmin content tab', err);
+        // Fetch publish requests for current user
+        const requestsData = await publishRequestAPI.getForUser({});
+        if (requestsData && requestsData.requests) {
+          // Enrich requests with content title from resources
+          const enrichedRequests = requestsData.requests.map((req: any) => {
+            const resource = resourcesData?.resources?.find((r: Resource) => r._id === req.contentId);
+            return {
+              ...req,
+              title: req.content?.title || resource?.title || 'Unknown',
+              thumbnail: resource?.thumbnail,
+              requestedOn: req.createdAt,
+            };
+          });
+          setRequests(enrichedRequests);
+          // Fetch courses for course content tab
+          try {
+            const coursesData = await coursesAPI.getAll({ limit: 100 });
+            if (coursesData && (coursesData.courses || coursesData.courses === undefined)) {
+              // API returns `{ courses }` or directly array depending on backend; normalize
+              const list = coursesData.courses || coursesData;
+              setCourses(list || []);
             }
+          } catch (err) {
+            console.warn('Failed to load courses for subadmin content tab', err);
           }
         }
       } catch (error: any) {

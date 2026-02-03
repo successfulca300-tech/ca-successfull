@@ -1,7 +1,0 @@
-backend
-docker-compose.yml
-Dockerfile
-.dockerignore
-railway.json
-.env
-.env.local
