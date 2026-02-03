@@ -107,7 +107,7 @@ const Header = () => {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex-shrink-0">
-              <img src="/logo.svg" alt="CA Successful" className="h-16 object-contain" />
+              <img src="/src/assets/logo.svg" alt="CA Successful" className="h-16 object-contain" />
             </Link>
 
             {/* Desktop Navigation */}
