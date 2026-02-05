@@ -58,6 +58,8 @@ app.use((req, res, next) => {
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:8080",
+  "https://www.casuccessful.com",
+  "https://casuccessful.com",
   "https://ca-successful.vercel.app",
   process.env.FRONTEND_URL, // render env
 ].filter(Boolean).map(o => o.replace(/\/$/, ''));
