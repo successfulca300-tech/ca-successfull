@@ -9,11 +9,28 @@ import mongoose from 'mongoose';
 const FIXED_TEST_SERIES = [
   {
     _id: 's1',
-    title: 'S1 Full Syllabus Test Series',
-    description: 'Comprehensive full-syllabus test series with 3 series (Series 1, 2, 3), each containing 1 test paper per subject.',
+    title: 'Full Syllabus Test Series',
+    description: `Full Syllabus Test Series
+
+Best suited for students who have completed the syllabus
+
+Full-length exam-oriented question papers
+
+Available in Series 1, Series 2 & Series 3
+
+Helps in real exam time management practice
+
+Enroll subject-wise, group-wise or series-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided
+`,
     seriesType: 'S1',
     seriesTypeLabel: 'Full Syllabus',
-    price: 2000,
+    price: 450,
     mode: 'Online',
     group: 'Both',
     subjects: ['FR', 'AFM', 'Audit', 'DT', 'IDT'],
@@ -22,7 +39,7 @@ const FIXED_TEST_SERIES = [
       comboPrice: 1200,
       allSubjectsPrice: 2000,
       allSeriesAllSubjectsPrice: 6000,
-      paperPrice: 400,
+      paperPrice: 450,
     },
     discountCodes: [
       { code: 'CA2026', type: 'flat', value: 100, label: 'CA2026 - ₹100 off' },
@@ -37,11 +54,11 @@ const FIXED_TEST_SERIES = [
       'Detailed Solutions',
       'Performance Analytics',
     ],
-    syllabusBreakdown: 'S1 Full Syllabus Test Series Structure:\n\nSeries: Series 1, Series 2, Series 3 (3 complete series)\n\nGroups & Subjects:\n- Group 1: FR, AFM, Audit (3 subjects)\n- Group 2: DT, IDT (2 subjects)\n- Both: All 5 Subjects (FR, AFM, Audit, DT, IDT)\n\nPapers per Subject:\n- Each subject: 1 paper per series\n- Total: 3 series × 5 subjects × 1 paper = 15 papers',
+    syllabusBreakdown: 'Full Syllabus Test Series Structure:\n\nSeries: Series 1, Series 2, Series 3 (3 complete series)\n\nGroups & Subjects:\n- Group 1: FR, AFM, Audit (3 subjects)\n- Group 2: DT, IDT (2 subjects)\n- Both: All 5 Subjects (FR, AFM, Audit, DT, IDT)\n\nPapers per Subject:\n- Each subject: 1 paper per series\n- Total: 3 series × 5 subjects × 1 paper = 15 papers',
     seriesDates: {
-      series1UploadDate: 'Papers will be uploaded by 10th December 2025',
-      series2UploadDate: 'Papers will be uploaded by 15th February 2026',
-      series3UploadDate: 'Papers will be uploaded by 20th March 2026',
+      series1UploadDate: 'Papers will be uploaded from 1st February 2025',
+      series2UploadDate: 'Papers will be uploaded from 7th March 2026',
+      series3UploadDate: 'Papers will be uploaded from 5th April 2026',
       group1SubmissionDate: '25th April 2026',
       group2SubmissionDate: '30th April 2026',
     },
@@ -55,7 +72,7 @@ const FIXED_TEST_SERIES = [
   },
   {
     _id: 's2',
-    title: 'S2 50% Syllabus Test Series',
+    title: '50% Syllabus Test Series',
     description: 'Focused test series covering the most important 50% of the syllabus. 2 test papers per subject across all groups.',
     seriesType: 'S2',
     seriesTypeLabel: '50% Syllabus',
@@ -67,7 +84,7 @@ const FIXED_TEST_SERIES = [
       subjectPrice: 450,
       comboPrice: 1200,
       allSubjectsPrice: 2000,
-      paperPrice: 400,
+      paperPrice: 450,
     },
     discountCodes: [
       { code: 'CA2026', type: 'flat', value: 100, label: 'CA2026 - ₹100 off' },
@@ -80,7 +97,7 @@ const FIXED_TEST_SERIES = [
   },
   {
     _id: 's3',
-    title: 'S3 30% Syllabus Test Series',
+    title: '30% Syllabus Test Series',
     description: 'Quick revision test series covering 30% of the syllabus. 1 test paper per subject.',
     seriesType: 'S3',
     seriesTypeLabel: '30% Syllabus',
@@ -92,7 +109,7 @@ const FIXED_TEST_SERIES = [
       subjectPrice: 450,
       comboPrice: 1200,
       allSubjectsPrice: 2000,
-      paperPrice: 400,
+      paperPrice: 450,
     },
     discountCodes: [
       { code: 'CA2026', type: 'flat', value: 100, label: 'CA2026 - ₹100 off' },
@@ -105,7 +122,7 @@ const FIXED_TEST_SERIES = [
   },
   {
     _id: 's4',
-    title: 'S4 CA Successful Specials',
+    title: 'CA Successful Specials',
     description: 'Special test series with curated questions and advanced preparation materials.',
     seriesType: 'S4',
     seriesTypeLabel: 'CA Successful Specials',
@@ -114,10 +131,10 @@ const FIXED_TEST_SERIES = [
     group: 'Both',
     subjects: ['FR', 'AFM', 'Audit', 'DT', 'IDT'],
     pricing: {
-      subjectPrice: 450,
-      comboPrice: 1200,
-      allSubjectsPrice: 2000,
-      paperPrice: 400,
+      subjectPrice: 1200,
+      comboPrice: 3600,
+      allSubjectsPrice: 6000,
+      paperPrice: 450,
     },
     discountCodes: [
       { code: 'CA2026', type: 'flat', value: 100, label: 'CA2026 - ₹100 off' },
@@ -367,7 +384,7 @@ export const createTestSeries = async (req, res) => {
       papersPerSubject: papersPerSubject || {},
       seriesDates: seriesDates || {},
       createdBy: req.user._id,
-      publishStatus: 'draft',
+      publishStatus: req.user.role === 'subadmin' ? 'published' : 'draft',
       isActive: true,
     });
 

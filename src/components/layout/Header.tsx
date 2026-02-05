@@ -6,12 +6,25 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { cartAPI } from "@/lib/api";
 
+interface NavItem {
+  title: string;
+  href: string;
+  upcoming?: boolean;
+  children?: NavItem[];
+}
+
 const Header = () => {
-  const navigationItems = [
+  const navigationItems: NavItem[] = [
     { title: 'Home', href: '/' },
     { title: 'Mentorship', href: '/mentorship' },
-    { title: 'Test Series', href: '/test-series' },
-    { title: 'Books', href: '/books' },
+    {
+      title: 'Test Series',
+      href: '/test-series',
+      children: [
+        { title: 'CA Final', href: '/test-series' },
+        { title: 'CA Inter', href: '#', upcoming: true },
+      ],
+    },
     { title: 'Free Resources', href: '/free-resources' },
     { title: 'About', href: '/about' },
   ];
@@ -92,11 +105,11 @@ const Header = () => {
             <Link to="/contact" className="hover:underline">CONTACT US</Link>
           </div>
           <div className="flex gap-4">
-            <a href="https://youtube.com/@casuccessful?si=N6WIjOIt9qb5morZ" className="hover:opacity-80"><Youtube size={18} /></a>
-            <a href="https://t.me/CASuccessful" className="hover:opacity-80"><Send size={18} /></a>
+            <a href="https://youtube.com/@casuccessful?si=N6WIjOIt9qb5morZ" target="_blank" className="hover:opacity-80"><Youtube size={18} /></a>
+            <a href="https://t.me/CASuccessful" target="_blank"  className="hover:opacity-80"><Send size={18} /></a>
             {/* <a href="#" className="hover:opacity-80"><Phone size={18} /></a> */}
             <a href="#" className="hover:opacity-80"><Linkedin size={18} /></a>
-            <a href="https://www.instagram.com/ca_successful" className="hover:opacity-80"><Instagram size={18} /></a>
+            <a href="https://www.instagram.com/ca_successful" target="_blank" className="hover:opacity-80"><Instagram size={18} /></a>
           </div>
         </div>
       </div>
@@ -126,14 +139,21 @@ const Header = () => {
                     <div className="dropdown-content">
                       {item.children.map((child) => (
                         <div key={child.title} className="relative group/sub">
-                          <Link
-                            to={child.href}
-                            className="dropdown-item flex items-center justify-between"
-                          >
-                            {child.title}
-                            {child.children && <ChevronDown size={14} className="-rotate-90" />}
-                          </Link>
-                          
+                          {child.upcoming ? (
+                            <div className="dropdown-item flex items-center justify-between text-muted-foreground cursor-not-allowed opacity-80">
+                              <span>{child.title}</span>
+                              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Upcoming</span>
+                            </div>
+                          ) : (
+                            <Link
+                              to={child.href}
+                              className="dropdown-item flex items-center justify-between"
+                            >
+                              {child.title}
+                              {child.children && <ChevronDown size={14} className="-rotate-90" />}
+                            </Link>
+                          )}
+
                           {child.children && (
                             <div className="absolute left-full top-0 bg-card shadow-xl rounded-lg py-2 min-w-[200px] opacity-0 invisible group-hover/sub:opacity-100 group-hover/sub:visible transition-all duration-200 border border-border">
                               {child.children.map((subChild) => (

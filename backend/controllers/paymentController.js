@@ -59,17 +59,31 @@ export const createOrder = async (req, res) => {
     };
     if (resourceType === 'course') createObj.courseId = resourceId;
     if (resourceType === 'testseries') {
-      // Normalize shorthand IDs to lowercase for consistency with paper storage
-      // If it looks like a shorthand (s1, s2, etc), normalize to lowercase
-      let normalizedTestSeriesId = resourceId;
-      if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
-        // It's not an ObjectId, so it's likely shorthand - normalize to lowercase
-        normalizedTestSeriesId = resourceId.toLowerCase();
+      // Prefer storing DB ObjectId if TestSeries exists, else fall back to normalized shorthand string
+      let storeTestSeriesId = resourceId;
+      let testSeriesRecord = null;
+      if (mongoose.Types.ObjectId.isValid(resourceId)) {
+        testSeriesRecord = await TestSeries.findById(resourceId);
       }
-      
-      createObj.testSeriesId = normalizedTestSeriesId;
-      console.log('[Payment] Storing testSeriesId in enrollment:', normalizedTestSeriesId, '(original was:', resourceId, ')');
-      
+      if (!testSeriesRecord) {
+        const st = String(resourceId || '').toUpperCase();
+        if (['S1','S2','S3','S4'].includes(st)) {
+          testSeriesRecord = await TestSeries.findOne({ seriesType: st });
+        }
+      }
+
+      if (testSeriesRecord) {
+        storeTestSeriesId = testSeriesRecord._id;
+      } else {
+        // Normalize to lowercase shorthand for legacy compatibility
+        if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
+          storeTestSeriesId = resourceId.toLowerCase();
+        }
+      }
+
+      createObj.testSeriesId = storeTestSeriesId;
+      console.log('[Payment] Storing testSeriesId in enrollment:', storeTestSeriesId, '(resolved record id:', testSeriesRecord?._id || null, ')');
+
       if (purchasedSubjects && Array.isArray(purchasedSubjects) && purchasedSubjects.length > 0) {
         createObj.purchasedSubjects = purchasedSubjects;
         console.log('[Payment] Saving purchasedSubjects to enrollment:', purchasedSubjects);

@@ -33,6 +33,7 @@ const TestSeriesDetail = () => {
   const [baseSeries, setBaseSeries] = useState<any>(null);
   const [managedData, setManagedData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [serverMedia, setServerMedia] = useState<{thumbnail?: string, video?: string}>({});
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [selectedSeries, setSelectedSeries] = useState<string[]>([]); // 'series1', 'series2', 'series3'
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -47,16 +48,18 @@ const TestSeriesDetail = () => {
   const [uploadedPapers, setUploadedPapers] = useState<{ [subject: string]: any[] }>({});
   const [loadingPapers, setLoadingPapers] = useState(false);
 
-  // Check if user is logged in
+  // Load logged-in user if present (do not force login for viewing details)
   useEffect(() => {
     const user = localStorage.getItem('user');
-    if (!user) {
-      navigate('/login');
-      return;
+    if (user) {
+      try {
+        const parsed = JSON.parse(user);
+        setUserObj(parsed);
+      } catch (e) {
+        console.error('Failed to parse user from storage', e);
+      }
     }
-    const parsed = JSON.parse(user);
-    setUserObj(parsed);
-  }, [navigate]);
+  }, []);
 
   // Load series data (fixed + managed)
   useEffect(() => {
@@ -66,20 +69,44 @@ const TestSeriesDetail = () => {
         const fixed = getFixedSeriesById(id);
         if (fixed) {
           setBaseSeries(fixed as any);
+
+          // If this is a fixed series (S1..S4) — try to load server-managed version (S1 focus)
+          try {
+            const fixedResp: any = await testSeriesAPI.getFixedManaged(id!);
+            if (fixedResp?.success && fixedResp.testSeries) {
+              setManagedData(fixedResp.testSeries);
+            }
+          } catch (err) {
+            // ignore server managed absence
+          }
         } else {
           const res = await testSeriesAPI.getById(id!);
           setBaseSeries(res as any || null);
         }
 
-        // Load managed data from localStorage
+        // Load managed data from localStorage as a fallback if none on server
         const managed = localStorage.getItem("testSeriesManagement");
-        if (managed) {
+        if (managed && !managedData) {
           try {
             const allManaged = JSON.parse(managed);
             setManagedData(allManaged[id!] || null);
           } catch (err) {
             console.error("Failed to load managed data:", err);
           }
+        }
+
+        // Fetch server-side media (thumbnail/video) so subadmin uploads show up for all users
+        try {
+          const thumbResp = await testSeriesAPI.getMedia(id!, 'thumbnail');
+          if (thumbResp?.success && thumbResp.media && thumbResp.media.length > 0) {
+            setServerMedia(prev => ({ ...prev, thumbnail: thumbResp.media[0].fileUrl }));
+          }
+          const videoResp = await testSeriesAPI.getMedia(id!, 'video');
+          if (videoResp?.success && videoResp.media && videoResp.media.length > 0) {
+            setServerMedia(prev => ({ ...prev, video: videoResp.media[0].fileUrl }));
+          }
+        } catch (e) {
+          // ignore fetch errors
         }
 
         // Check enrollment
@@ -113,6 +140,124 @@ const TestSeriesDetail = () => {
     }
   }, [baseSeries]);
 
+  // Default overview texts per series (user-provided)
+  const SERIES_OVERVIEWS: Record<string, string> = {
+    S2: `50% Syllabus Test Series
+
+Ideal for students who want to test preparation in two phases
+
+2 Papers per subject
+
+50% + 50% syllabus coverage = 100%
+
+Helps in gradual and structured syllabus completion
+
+Enroll subject-wise, group-wise or in combinations
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+    S4: `CA Successful Test Series
+
+Designed for serious CA aspirants aiming for exam success
+
+Total 6 papers per subject for multiple revisions
+
+1 Full syllabus paper (100% coverage)
+
+2 Half syllabus papers (50% + 50%)
+
+3 Part syllabus papers (30% + 30% + 30%)
+
+Complete syllabus covered with repeated practice
+
+Enroll subject-wise or group-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+    S1: `Full Syllabus Test Series
+
+Best suited for students who have completed the syllabus
+
+Full-length exam-oriented question papers
+
+Available in Series 1, Series 2 & Series 3
+
+Helps in real exam time management practice
+
+Enroll subject-wise, group-wise or series-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+    S3: `30% Syllabus Test Series
+
+Perfect for early-stage CA preparation
+
+Syllabus divided into smaller and manageable parts
+
+3 Papers per subject
+
+30% + 30% + 30% syllabus coverage = 100%
+
+Helps in concept-wise and topic-wise preparation
+
+Enroll subject-wise, group-wise or in combinations
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+  };
+
+  // Default disclaimer texts per series (user-provided)
+  const SERIES_DISCLAIMERS: Record<string, string> = {
+    S1: `This test series is designed specifically for CA Final exam preparation.
+
+Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
+
+All enrollments are confirmed upon purchase and are non-refundable.
+
+Technical assistance will be available during standard business hours to ensure a smooth experience.
+
+By enrolling in the test series, students are agree to our terms and conditions.`,
+    S2: `This test series is designed specifically for CA Final exam preparation.
+
+Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
+
+All enrollments are confirmed upon purchase and are non-refundable.
+
+Technical assistance will be available during standard business hours to ensure a smooth experience.
+
+By enrolling in the test series, students are agree to our terms and conditions.`,
+    S3: `This test series is designed specifically for CA Final exam preparation.
+
+Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
+
+All enrollments are confirmed upon purchase and are non-refundable.
+
+Technical assistance will be available during standard business hours to ensure a smooth experience.
+
+By enrolling in the test series, students are agree to our terms and conditions.`,
+    S4: `This test series is designed specifically for CA Final exam preparation.
+
+Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
+
+All enrollments are confirmed upon purchase and are non-refundable.
+
+Technical assistance will be available during standard business hours to ensure a smooth experience.
+
+By enrolling in the test series, students are agree to our terms and conditions.`,
+  };
+
   // Fetch pricing from backend whenever selections change
   useEffect(() => {
     if (!baseSeries || !id) {
@@ -141,17 +286,17 @@ const TestSeriesDetail = () => {
     const fetchPricing = async () => {
       try {
         const response = await testSeriesAPI.calculatePrice(
-          id,
+          id!,
           baseSeries.seriesType === 'S1' ? selectedSeries : [],
           selectedSubjects,
           appliedDiscount?.code || undefined
         );
 
-        if (response.success && response.pricing) {
-          const pricing = response.pricing;
-          setBasePrice(pricing.basePrice);
-          setTotalPapers(pricing.totalPapers);
-          setComputedPrice(pricing.finalPrice);
+        if (response?.success && response.pricing) {
+          const pricing = response.pricing as { basePrice: number; totalPapers: number; finalPrice: number };
+          setBasePrice(pricing.basePrice || 0);
+          setTotalPapers(pricing.totalPapers || 0);
+          setComputedPrice(pricing.finalPrice || 0);
         }
       } catch (error) {
         console.error('Error calculating price:', error);
@@ -174,8 +319,8 @@ const TestSeriesDetail = () => {
           series: baseSeries?.seriesType === 'S1' && selectedSeries.length > 0 ? selectedSeries[0] : undefined,
         });
 
-        if (response.success && response.papers) {
-          setUploadedPapers(response.papers);
+        if (response?.success && response.papers) {
+          setUploadedPapers(response.papers as { [subject: string]: any[] });
         }
       } catch (error) {
         console.error('Error fetching papers:', error);
@@ -189,6 +334,16 @@ const TestSeriesDetail = () => {
 
   const handleApplyDiscount = async () => {
     if (!baseSeries) return;
+    // Enforce series-specific discount rules
+    if (baseSeries.seriesType === 'S1' && totalPapers <= 2) {
+      toast.error('Apply only when you select more than 2 papers');
+      return;
+    }
+    if ((baseSeries.seriesType === 'S2' || baseSeries.seriesType === 'S3') && selectedSubjects.length <= 2) {
+      toast.error('Apply only when you select more than 2 subjects');
+      return;
+    }
+
     const code = (discountInput || '').trim();
     if (!code) {
       toast.error('Enter a discount code');
@@ -298,6 +453,44 @@ const TestSeriesDetail = () => {
   }
 
   const series = managedData || baseSeries;
+  const cleanTitle = (t?: string) => (t || '').replace(/^S[2-4]\s+/i, '').trim();
+  const displayTitle = cleanTitle(series?.cardTitle || series?.title || baseSeries?.title);
+  const formatDate = (value?: string) => {
+    if (!value) return 'TBD';
+    const trimmed = String(value).trim();
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      const day = parsed.getDate();
+      const suffix =
+        day % 10 === 1 && day !== 11 ? 'st' :
+        day % 10 === 2 && day !== 12 ? 'nd' :
+        day % 10 === 3 && day !== 13 ? 'rd' : 'th';
+      const monthYear = parsed.toLocaleDateString('en-GB', {
+        month: 'long',
+        year: 'numeric',
+      });
+      return `${day}${suffix} ${monthYear}`;
+    }
+    // Handle strings like "Papers will be uploaded from 1st Feb 2026"
+    const match = trimmed.match(/(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\s+(\d{4})/);
+    if (match) {
+      const [, day, month, year] = match;
+      const parsedFromText = new Date(`${day} ${month} ${year}`);
+      if (!Number.isNaN(parsedFromText.getTime())) {
+        const d = parsedFromText.getDate();
+        const suffix =
+          d % 10 === 1 && d !== 11 ? 'st' :
+          d % 10 === 2 && d !== 12 ? 'nd' :
+          d % 10 === 3 && d !== 13 ? 'rd' : 'th';
+        const monthYear = parsedFromText.toLocaleDateString('en-GB', {
+          month: 'long',
+          year: 'numeric',
+        });
+        return `${d}${suffix} ${monthYear}`;
+      }
+    }
+    return trimmed;
+  };
   const isSubadmin = userObj?.role === 'subadmin';
   const showSeriesSelection = baseSeries?.seriesType === 'S1';
 
@@ -330,10 +523,10 @@ const TestSeriesDetail = () => {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
               {/* Thumbnail Image */}
               <div className="flex flex-col items-center justify-center">
-                {series?.thumbnail || series?.cardThumbnail ? (
+                {(series?.cardThumbnail || serverMedia.thumbnail || series?.thumbnail) ? (
                   <img
-                    src={series.thumbnail || series.cardThumbnail}
-                    alt={series.cardTitle || series.title || baseSeries.title}
+                    src={series.cardThumbnail || serverMedia.thumbnail || series.thumbnail}
+                    alt={displayTitle}
                     className="w-full h-48 object-cover rounded-lg border border-border"
                   />
                 ) : (
@@ -345,7 +538,7 @@ const TestSeriesDetail = () => {
 
               {/* Title, Price, Mode */}
               <div className="md:col-span-3">
-                <h1 className="text-3xl md:text-4xl font-bold mb-4">{series.cardTitle || series.title || baseSeries.title}</h1>
+                <h1 className="text-3xl md:text-4xl font-bold mb-4">{displayTitle}</h1>
                 
                 <div className="flex items-center gap-6 mb-6 flex-wrap">
                   <div>
@@ -366,11 +559,12 @@ const TestSeriesDetail = () => {
                   <div className="p-3 bg-secondary/50 rounded-lg">
                     <p className="text-muted-foreground">Total Tests</p>
                     <p className="text-xl font-bold">
-                      {baseSeries.papersPerSubject && baseSeries.subjects
-                        ? baseSeries.seriesType === 'S1'
-                          ? Object.values(baseSeries.papersPerSubject).reduce((a, b) => a + b, 0) * 3
-                          : Object.values(baseSeries.papersPerSubject).reduce((a, b) => a + b, 0)
-                        : 0}
+                      {(() => {
+                        const papers = (baseSeries.papersPerSubject ? Object.values(baseSeries.papersPerSubject) : []) as any[];
+                        const sum = papers.reduce((a: number, b: any) => a + Number(b || 0), 0);
+                        return baseSeries && baseSeries.seriesType === 'S1' ? sum * 3 : sum;
+                      })()
+                      }
                     </p>
                   </div>
                   <div className="p-3 bg-secondary/50 rounded-lg">
@@ -485,28 +679,7 @@ const TestSeriesDetail = () => {
                 </div>
               </div>
 
-              {/* Discount Code */}
-              <div className="pt-4 border-t border-border">
-                <label className="block text-sm font-semibold mb-3">Discount Code</label>
-                <div className="flex gap-2">
-                  <input
-                    value={discountInput}
-                    onChange={(e) => setDiscountInput(e.target.value)}
-                    placeholder="Enter discount code"
-                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                  />
-                  <Button
-                    onClick={handleApplyDiscount}
-                    disabled={baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false}
-                    className="text-sm"
-                  >
-                    Apply
-                  </Button>
-                </div>
-                {appliedDiscount && (
-                  <p className="text-sm text-green-600 mt-2">✓ {appliedDiscount.label || appliedDiscount.code} applied</p>
-                )}
-              </div>
+
             </div>
 
             {/* Live Summary */}
@@ -549,6 +722,40 @@ const TestSeriesDetail = () => {
                     <span>Final Price:</span>
                     <span className="text-primary">₹{(computedPrice ?? 0).toLocaleString()}</span>
                   </div>
+
+                  {/* Discount Code moved here (between Final Price and Buy Now) */}
+                  <div className="pt-3">
+                    <label className="block text-sm font-semibold mb-2">Discount Code</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={discountInput}
+                        onChange={(e) => setDiscountInput(e.target.value)}
+                        placeholder="Enter discount code"
+                        className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                      />
+                        <Button
+                          onClick={handleApplyDiscount}
+                          disabled={
+                            (baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false) ||
+                            (baseSeries?.seriesType === 'S1' && totalPapers <= 2) ||
+                            ((baseSeries?.seriesType === 'S2' || baseSeries?.seriesType === 'S3') && selectedSubjects.length <= 2)
+                          }
+                          className="text-sm"
+                        >
+                          Apply
+                        </Button>
+                    </div>
+                    {appliedDiscount && (
+                      <p className="text-sm text-green-600 mt-2">✓ {appliedDiscount.label || appliedDiscount.code} applied</p>
+                    )}
+                      {baseSeries?.seriesType === 'S1' && totalPapers <= 2 && (
+                        <p className="text-sm text-orange-600 mt-2">⚠️ Apply only when you select more than 2 papers</p>
+                      )}
+                      {(baseSeries?.seriesType === 'S2' || baseSeries?.seriesType === 'S3') && selectedSubjects.length <= 2 && (
+                        <p className="text-sm text-orange-600 mt-2">⚠️ Apply only when you select more than 2 subjects</p>
+                      )}
+                  </div>
+
                 </div>
 
                 {/* Action Button */}
@@ -582,94 +789,110 @@ const TestSeriesDetail = () => {
           {/* ============ CONTENT SECTIONS ============ */}
 
           {/* 1. Overview Section */}
-          {series?.description && (
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-6">Overview</h2>
-              {series?.description && (
-                <div className="p-6 bg-card rounded-lg border border-border mb-4">
-                  <p className="text-muted-foreground whitespace-pre-wrap">{series.description}</p>
+          {
+            (() => {
+              const overviewText = (series?.overview as string) || SERIES_OVERVIEWS[series?.seriesType] || series?.description || '';
+              if (!overviewText) return null;
+              return (
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold mb-6">Overview</h2>
+                  <div className="p-6 bg-card rounded-lg border border-border mb-4">
+                    <p className="text-muted-foreground whitespace-pre-wrap">{overviewText}</p>
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+              );
+            })()
+          }
 
           {/* 2. Test Series Details - Upload Timeline (Only for S1) */}
           {baseSeries.seriesType === 'S1' && series?.seriesDates && (
             <div className="mb-8">
               <h2 className="text-2xl font-bold mb-6">Test Series Details</h2>
               <div className="space-y-3 p-6 bg-card rounded-lg border border-border">
-                <div className="flex items-start gap-3">
-                  <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">Series 1</p>
-                    <p className="font-semibold">Papers will be uploaded by 10th December 2025</p>
+                  <div className="flex items-start gap-3">
+                    <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium">Series 1</p>
+                      <p className="font-semibold">Uploaded from {formatDate(series.seriesDates?.series1UploadDate)}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">Series 2</p>
-                    <p className="font-semibold">Papers will be uploaded by 15th February 2026</p>
+                  <div className="flex items-start gap-3">
+                    <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium">Series 2</p>
+                      <p className="font-semibold">Uploaded from {formatDate(series.seriesDates?.series2UploadDate)}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">Series 3</p>
-                    <p className="font-semibold">Papers will be uploaded by 20th March 2026</p>
+                  <div className="flex items-start gap-3">
+                    <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium">Series 3</p>
+                      <p className="font-semibold">Uploaded from {formatDate(series.seriesDates?.series3UploadDate)}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="border-t border-border pt-3 mt-3 flex items-start gap-3">
-                  <Clock className="text-primary flex-shrink-0 mt-1" size={24} />
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">All Series</p>
-                    <p className="font-semibold">Submission Deadline: 30th April 2026</p>
+                  <div className="border-t border-border pt-3 mt-3 flex items-start gap-3">
+                    <Clock className="text-primary flex-shrink-0 mt-1" size={24} />
+                    <div>
+                      <p className="text-sm text-muted-foreground font-medium">Submission Deadline</p>
+                      <p className="font-semibold">
+                        Group 1: {formatDate(series.seriesDates?.group1SubmissionDate)} <br /> Group 2: {formatDate(series.seriesDates?.group2SubmissionDate)}
+                      </p>
+                    </div>
                   </div>
-                </div>
               </div>
             </div>
           )}
 
           {/* 3. Test Series Schedule - Subject-wise Dates Table */}
-          {series?.subjectDateSchedule && series.subjectDateSchedule.length > 0 && (
-            <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-8">
+          {baseSeries.seriesType === 'S1' && series?.subjectDateSchedule && series.subjectDateSchedule.length > 0 && (
+            <div className="mb-8 rounded-xl border border-border bg-card p-6 md:p-8">
               <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <span className="text-3xl">📅</span>
+                <span className="text-2xl">📅</span>
                 Test Series Schedule
               </h2>
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
+                <table className="w-full border-collapse text-sm">
                   <thead>
-                    <tr className="bg-primary/10">
-                      <th className="border border-border px-4 py-3 text-left font-bold text-base bg-yellow-100">SERIES 1</th>
-                      <th className="border border-border px-4 py-3 text-left font-bold text-base bg-yellow-100"></th>
-                      <th className="border border-border px-4 py-3 text-left font-bold text-base bg-yellow-100">SERIES 2</th>
-                      <th className="border border-border px-4 py-3 text-left font-bold text-base bg-yellow-100"></th>
-                      <th className="border border-border px-4 py-3 text-left font-bold text-base bg-yellow-100">SERIES 3</th>
-                      <th className="border border-border px-4 py-3 text-left font-bold text-base bg-yellow-100"></th>
-                    </tr>
-                    <tr className="bg-secondary">
-                      <th className="border border-border px-4 py-2 text-left text-sm font-semibold">Date</th>
-                      <th className="border border-border px-4 py-2 text-left text-sm font-semibold">Subject</th>
-                      <th className="border border-border px-4 py-2 text-left text-sm font-semibold">Date</th>
-                      <th className="border border-border px-4 py-2 text-left text-sm font-semibold">Subject</th>
-                      <th className="border border-border px-4 py-2 text-left text-sm font-semibold">Date</th>
-                      <th className="border border-border px-4 py-2 text-left text-sm font-semibold">Subject</th>
+                    <tr className="bg-slate-900 text-white">
+                      <th className="px-4 py-3 text-left font-semibold">Subject</th>
+                      <th className="px-4 py-3 text-left font-semibold">Series 1</th>
+                      <th className="px-4 py-3 text-left font-semibold">Series 2</th>
+                      <th className="px-4 py-3 text-left font-semibold">Series 3</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="bg-slate-950 text-white">
                     {series.subjectDateSchedule.map((row: any, index: number) => (
-                      <tr key={index} className="hover:bg-blue-50/50">
-                        <td className="border border-border px-4 py-3 text-center font-bold text-gray-900">{row.series1Date || '-'}</td>
-                        <td className="border border-border px-4 py-3 font-bold text-blue-700 text-center">{row.subject || '-'}</td>
-                        <td className="border border-border px-4 py-3 text-center font-bold text-gray-900">{row.series2Date || '-'}</td>
-                        <td className="border border-border px-4 py-3 font-bold text-blue-700 text-center">{row.subject || '-'}</td>
-                        <td className="border border-border px-4 py-3 text-center font-bold text-gray-900">{row.series3Date || '-'}</td>
-                        <td className="border border-border px-4 py-3 font-bold text-blue-700 text-center">{row.subject || '-'}</td>
+                      <tr key={index} className="border-t border-white/10">
+                        <td className="px-4 py-3 font-semibold">{row.subject || '-'}</td>
+                        <td className="px-4 py-3">{formatDate(row.series1Date)}</td>
+                        <td className="px-4 py-3">{formatDate(row.series2Date)}</td>
+                        <td className="px-4 py-3">{formatDate(row.series3Date)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {baseSeries.seriesType !== 'S1' && series?.seriesDates && (
+              <div className="mb-8 rounded-xl border border-border bg-card p-6 md:p-8">
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
+                  <span className="text-2xl">📅</span>
+                  Test Series Details
+                </h2>
+                <p className="text-muted-foreground mb-4">
+                  The test series will be uploaded from{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatDate(series.seriesDates?.series1UploadDate)}
+                  </span>
+                  .
+                </p>
+              <div className="mt-4 pt-4 border-t border-border">
+                <p className="text-sm text-muted-foreground font-medium">Submission Deadline</p>
+                <p className="font-semibold text-foreground">
+                  Group 1 : {formatDate(series.seriesDates?.group1SubmissionDate)} <br /> Group 2 : {formatDate(series.seriesDates?.group2SubmissionDate)}
+                </p>
               </div>
             </div>
           )}
@@ -681,16 +904,24 @@ const TestSeriesDetail = () => {
               <div>
                 <h2 className="text-2xl font-bold mb-3 text-yellow-900">Disclaimer</h2>
                 <div className="text-sm text-yellow-800/80 space-y-2 whitespace-pre-wrap leading-relaxed">
-                  {series?.instructions ? (
-                    series.instructions
+                  {series?.disclaimer ? (
+                    typeof series.disclaimer === 'string' ? (
+                      <div className="whitespace-pre-wrap">{series.disclaimer}</div>
+                    ) : (
+                      <div className="whitespace-pre-wrap">{String(series.disclaimer)}</div>
+                    )
                   ) : (
-                    <>
-                      <p>• This test series is designed for competitive exam preparation.</p>
-                      <p>• Once purchased, access is valid as per the schedule mentioned above.</p>
-                      <p>• Refund policy: No refunds after 48 hours of purchase.</p>
-                      <p>• Technical support available during business hours.</p>
-                      <p>• By purchasing, you agree to our terms and conditions.</p>
-                    </>
+                    <div className="whitespace-pre-wrap">
+                      {SERIES_DISCLAIMERS[series?.seriesType] || `This test series is designed for competitive exam preparation.
+
+Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
+
+All enrollments are confirmed upon purchase and are non-refundable.
+
+Technical assistance will be available during standard business hours to ensure a smooth experience.
+
+By enrolling in the test series, students are agree to our terms and conditions.`}
+                    </div>
                   )}
                 </div>
               </div>

@@ -54,7 +54,7 @@ const CoursesSection = () => {
           <span className="text-primary font-medium text-sm uppercase tracking-wider">Learn from the Best</span>
           <h2 className="section-title mt-2">Explore Popular Courses</h2>
           <p className="text-muted-foreground mt-4 max-w-2xl mx-auto">
-            Comprehensive courses designed by AIR holders and experienced faculty to help you crack CA/CMA exams
+            Comprehensive courses designed for CA/CMA exams with clear concepts and structured practice
           </p>
         </div>
 

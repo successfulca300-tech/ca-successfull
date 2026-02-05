@@ -20,6 +20,8 @@ import Mentorship from "./pages/Mentorship";
 import ResourceDetail from "./pages/ResourceDetail";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 import Login from "./pages/Login";
 import VerifyEmail from "./pages/VerifyEmail";
 import Cart from "./pages/Cart";
@@ -66,6 +68,8 @@ const App = () => (
           <Route path="/free-resources" element={<FreeResources />} />
 
           <Route path="/about" element={<About />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/login" element={<Login />} />
           <Route path="/verify-email" element={<VerifyEmail />} />

@@ -3,9 +3,9 @@ import mongoose from 'mongoose';
 const testSeriesMediaSchema = new mongoose.Schema(
   {
     testSeriesId: {
-      type: String,
-      required: true,
-      enum: ['s1', 's2', 's3', 's4'],
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TestSeries',
+      required: [true, 'testSeriesId is required'],
       index: true,
     },
     mediaType: {
@@ -40,23 +40,29 @@ const testSeriesMediaSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    uploadedByRole: {
+      type: String,
+      enum: ['user','subadmin','admin'],
+      default: 'subadmin',
+    },
     previousFileId: {
       type: String,
       default: null,
     },
     status: {
       type: String,
-      enum: ['active', 'archived'],
-      default: 'active',
+      enum: ['published', 'archived'],
+      default: 'published',
+      index: true,
     },
   },
   { timestamps: true }
 );
 
-// Create index to ensure only one active thumbnail and one active video per series
+// Ensure only one published thumbnail/video per TestSeries
 testSeriesMediaSchema.index(
-  { testSeriesId: 1, mediaType: 1, status: 1 },
-  { unique: true, sparse: true }
+  { testSeriesId: 1, mediaType: 1 },
+  { unique: true, partialFilterExpression: { status: 'published' } }
 );
 
 const TestSeriesMedia = mongoose.model('TestSeriesMedia', testSeriesMediaSchema);

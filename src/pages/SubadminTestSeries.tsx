@@ -153,9 +153,11 @@ const SubadminTestSeries = () => {
         initialized[s._id] = {
           _id: s._id,
           title: s.title,
+          overview: (s as any).overview || s.description || "",
           description: s.description || "",
           highlights: s.highlights || [],
           instructions: s.instructions || "",
+          disclaimer: (s as any).disclaimer || "",
           seriesDates: s.seriesDates || {
             series1UploadDate: "",
             series2UploadDate: "",
@@ -198,11 +200,38 @@ const SubadminTestSeries = () => {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
       setLoading(true);
+      // Save local copy first
       localStorage.setItem("testSeriesManagement", JSON.stringify(seriesData));
-      toast.success("Test Series updated successfully!");
+
+      // Persist server-managed data for all fixed series (s1..s4)
+      const fixedKeys = Object.keys(seriesData).filter(k => /^s[1-4]$/i.test(k));
+      if (fixedKeys.length === 0) {
+        toast.success("Test Series updated locally");
+        return;
+      }
+
+      for (const key of fixedKeys) {
+        const payload = seriesData[key];
+        if (!payload) continue;
+        try {
+          const resp: any = await testSeriesAPI.upsertFixed(key, payload);
+          if (resp?.success && resp.testSeries) {
+            const updated = resp.testSeries;
+            const newSeriesData = { ...seriesData, [key]: { ...(seriesData[key] || {}), ...updated } };
+            setSeriesData(newSeriesData);
+            localStorage.setItem("testSeriesManagement", JSON.stringify(newSeriesData));
+            toast.success(`Saved ${key.toUpperCase()} data to server`);
+          } else {
+            toast.success(`Saved ${key.toUpperCase()} locally (server did not return managed data)`);
+          }
+        } catch (err) {
+          console.warn(`Failed to save ${key} to server:`, err);
+          toast.error(`Saved ${key.toUpperCase()} locally but failed to persist to server`);
+        }
+      }
     } catch (error) {
       console.error("Error saving:", error);
       toast.error("Failed to save changes");
@@ -548,7 +577,11 @@ const SubadminTestSeries = () => {
                                       thumbnail: response.url,
                                     },
                                   }));
-                                  toast.success("Thumbnail uploaded successfully");
+                                  if (response.dbSaved === false) {
+                                    toast.warning("Thumbnail uploaded to storage but DB save failed. It may not appear on the user side yet.");
+                                  } else {
+                                    toast.success("Thumbnail uploaded successfully");
+                                  }
                                 }
                               } catch (error) {
                                 console.error('Upload error:', error);
@@ -642,15 +675,15 @@ const SubadminTestSeries = () => {
                     {/* Description */}
                     <div>
                       <label className="block text-sm font-semibold mb-2">
-                        Description
+                        Overview
                       </label>
                       <Textarea
-                        value={currentSeries.description || ""}
+                        value={currentSeries.overview || currentSeries.description || ""}
                         onChange={(e) =>
-                          updateField("description", e.target.value)
+                          updateField("overview", e.target.value)
                         }
-                        placeholder="Enter detailed description"
-                        rows={4}
+                        placeholder="Enter overview text shown on detail page"
+                        rows={5}
                       />
                     </div>
 
@@ -666,6 +699,21 @@ const SubadminTestSeries = () => {
                         }
                         placeholder="Enter test instructions for students"
                         rows={3}
+                      />
+                    </div>
+
+                    {/* Disclaimer */}
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">
+                        Disclaimer
+                      </label>
+                      <Textarea
+                        value={currentSeries.disclaimer || ""}
+                        onChange={(e) =>
+                          updateField("disclaimer", e.target.value)
+                        }
+                        placeholder="Enter disclaimer text for the test series"
+                        rows={5}
                       />
                     </div>
 
@@ -708,7 +756,7 @@ const SubadminTestSeries = () => {
                     </div>
 
                     {/* Series Dates for S1 */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
                         <label className="block text-sm font-semibold mb-2">
                           Series 1 Upload Date
@@ -763,15 +811,47 @@ const SubadminTestSeries = () => {
                           }}
                         />
                       </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            Group 1 Submission Date
+                          </label>
+                          <Input
+                            type="date"
+                            value={currentSeries.seriesDates?.group1SubmissionDate || ""}
+                            onChange={(e) => {
+                              const dates = currentSeries.seriesDates || {};
+                              updateField("seriesDates", {
+                                ...dates,
+                                group1SubmissionDate: e.target.value,
+                              });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-2">
+                            Group 2 Submission Date
+                          </label>
+                          <Input
+                            type="date"
+                            value={currentSeries.seriesDates?.group2SubmissionDate || ""}
+                            onChange={(e) => {
+                              const dates = currentSeries.seriesDates || {};
+                              updateField("seriesDates", {
+                                ...dates,
+                                group2SubmissionDate: e.target.value,
+                              });
+                            }}
+                          />
+                        </div>
                     </div>
 
-                    {/* Subject-wise Date Schedule for All 3 Series */}
-                    {activeTab === 's1' && (
-                      <div className="border-t pt-6">
-                        <h4 className="text-lg font-semibold mb-2">Subject-wise Date Schedule</h4>
-                        <p className="text-sm text-muted-foreground mb-6">
-                          Add dates for each subject across all 3 series. This schedule will be displayed to users instead of the "How to Use" section.
-                        </p>
+                      {/* Subject-wise Date Schedule */}
+                      {activeTab === 's1' && (
+                        <div className="border-t pt-6">
+                          <h4 className="text-lg font-semibold mb-2">Subject-wise Date Schedule</h4>
+                          <p className="text-sm text-muted-foreground mb-6">
+                            Add dates for each subject across all 3 series. This schedule will be displayed to users instead of the "How to Use" section.
+                          </p>
                         <div className="border border-border rounded-lg overflow-hidden bg-white">
                           <table className="w-full">
                             <thead>
@@ -861,11 +941,73 @@ const SubadminTestSeries = () => {
                                   </tr>
                                 ));
                               })()}
-                            </tbody>
-                          </table>
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+
+                      {activeTab !== 's1' && (
+                        <div className="border-t pt-6">
+                          <h4 className="text-lg font-semibold mb-2">Upload Schedule</h4>
+                          <p className="text-sm text-muted-foreground mb-6">
+                            Set the single upload start date for this test series.
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-semibold mb-2">
+                                Upload Start Date
+                              </label>
+                              <Input
+                                type="date"
+                                value={currentSeries.seriesDates?.series1UploadDate || ""}
+                                onChange={(e) => {
+                                  const dates = currentSeries.seriesDates || {};
+                                  updateField("seriesDates", {
+                                    ...dates,
+                                    series1UploadDate: e.target.value,
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-semibold mb-2">
+                                Group 1 Submission Date
+                              </label>
+                              <Input
+                                type="date"
+                                value={currentSeries.seriesDates?.group1SubmissionDate || ""}
+                                onChange={(e) => {
+                                  const dates = currentSeries.seriesDates || {};
+                                  updateField("seriesDates", {
+                                    ...dates,
+                                    group1SubmissionDate: e.target.value,
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-semibold mb-2">
+                                Group 2 Submission Date
+                              </label>
+                              <Input
+                                type="date"
+                                value={currentSeries.seriesDates?.group2SubmissionDate || ""}
+                                onChange={(e) => {
+                                  const dates = currentSeries.seriesDates || {};
+                                  updateField("seriesDates", {
+                                    ...dates,
+                                    group2SubmissionDate: e.target.value,
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                     {/* Paper Upload Section - Series Specific */}
                     <div className="space-y-6">
@@ -1073,7 +1215,7 @@ const SubadminTestSeries = () => {
                               <Button
                                 onClick={handleUploadPaper}
                                 disabled={uploadingPaper}
-                                className="w-full bg-green-600 hover:bg-green-700"
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                               >
                                 {uploadingPaper ? <Loader className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
                                 Upload S2 Paper
@@ -1187,7 +1329,7 @@ const SubadminTestSeries = () => {
                       {activeTab === 's4' && (
                         <>
                           <div>
-                            <h4 className="text-lg font-semibold mb-4">Upload S4 CA Successful Specials Test Papers</h4>
+                            <h4 className="text-lg font-semibold mb-4">Upload  Test Papers</h4>
                             <p className="text-sm text-muted-foreground mb-4">
                               S4 has 6 test papers per subject (5 subjects total): 1 Full (100%) + 2 Half (50%) + 3 Quick (30%)
                             </p>
@@ -1425,9 +1567,11 @@ const SubadminTestSeries = () => {
                                     },
                                   }));
                                   updateField("isVideoUploading", false);
-                                  toast.success(
-                                    `Video uploaded: ${file.name}`
-                                  );
+                                  if (response.dbSaved === false) {
+                                    toast.warning(`Video uploaded to storage but DB save failed. It may not be visible to users yet.`);
+                                  } else {
+                                    toast.success(`Video uploaded: ${file.name}`);
+                                  }
                                 } else {
                                   throw new Error(
                                     response.message || "Upload failed"

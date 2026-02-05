@@ -1,4 +1,4 @@
-import { BarChart3, FileText, MessageSquare, Users, BookOpen, Target } from "lucide-react";
+import { BarChart3, FileText, Star, Users, BookOpen, Target } from "lucide-react";
 
 const ServicesSection = () => {
   const services = [
@@ -7,7 +7,7 @@ const ServicesSection = () => {
       description: "Comprehensive test papers covering all CA exam topics with realistic difficulty levels",
       icon: BarChart3,
       color: "from-blue-500 to-cyan-600",
-      details: "S1: 15 papers, S2: 10 papers, S3: 15 papers, S4: 30 special papers"
+      details: "Full Syllabus : 15 papers, 50% Syllabus : 10 papers, 30% Syllabus : 15 papers, CA Successful Specials : 30 special papers"
     },
     {
       title: "Answer Sheet Evaluation",
@@ -19,13 +19,15 @@ const ServicesSection = () => {
     {
       title: "Personalized Feedback",
       description: "Get comprehensive feedback on your performance with actionable improvement tips",
-      icon: MessageSquare,
+      icon: Star,
       color: "from-green-500 to-emerald-600",
-      details: "Performance analysis, weak areas identification, targeted recommendations"
+      details: "Performance analysis, weak areas identification, targeted recommendations",
+      iconBg: "bg-emerald-100",
+      iconText: "text-emerald-700"
     },
     {
       title: "Expert Mentorship",
-      description: "One-on-one guidance from experienced CA mentors throughout your journey",
+      description: "One-on-one guidance and study support throughout your journey",
       icon: Users,
       color: "from-orange-500 to-red-600",
       details: "Strategic guidance, doubt clarification, consistent accountability"
@@ -70,7 +72,11 @@ const ServicesSection = () => {
                 <div className={`absolute inset-0 bg-gradient-to-br ${service.color} opacity-0 group-hover:opacity-5 rounded-xl transition-opacity`}></div>
 
                 {/* Icon */}
-                <div className={`inline-flex p-3 rounded-lg bg-gradient-to-br ${service.color} text-white mb-4`}>
+                <div
+                  className={`inline-flex p-3 rounded-lg mb-4 ${
+                    service.iconBg ? service.iconBg : `bg-gradient-to-br ${service.color}`
+                  } ${service.iconText ? service.iconText : "text-white"}`}
+                >
                   <Icon className="w-6 h-6" />
                 </div>
 

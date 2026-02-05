@@ -77,6 +77,7 @@ interface Resource {
   thumbnail?: string;
   fileUrl?: string;
   description: string;
+  price?: number;
 }
 
 interface PublishRequest {
@@ -230,7 +231,7 @@ const SubAdminDashboard = () => {
         }
 
         // Fetch publish requests for current user
-        const requestsData = await publishRequestAPI.getForUser({});
+        const requestsData: { requests?: PublishRequest[] } = await publishRequestAPI.getForUser({});
         if (requestsData && requestsData.requests) {
           // Enrich requests with content title from resources
           const enrichedRequests = requestsData.requests.map((req: any) => {
@@ -246,11 +247,14 @@ const SubAdminDashboard = () => {
           // Fetch courses for course content tab
           try {
             const coursesData = await coursesAPI.getAll({ limit: 100 });
-            if (coursesData && (coursesData.courses || coursesData.courses === undefined)) {
-              // API returns `{ courses }` or directly array depending on backend; normalize
-              const list = coursesData.courses || coursesData;
-              setCourses(list || []);
+            // API returns `{ courses }` or directly an array depending on backend; normalize into an array
+            let list: any[] = [];
+            if (Array.isArray(coursesData)) {
+              list = coursesData as any[];
+            } else if ((coursesData as any)?.courses) {
+              list = (coursesData as any).courses;
             }
+            setCourses(list || []);
           } catch (err) {
             console.warn('Failed to load courses for subadmin content tab', err);
           }
@@ -770,7 +774,7 @@ const SubAdminDashboard = () => {
         toast.success("Category updated successfully!");
       } else {
         // Create new category
-        const newCat = await categoriesAPI.create({
+        const newCat: any = await categoriesAPI.create({
           name: newCategory.name,
           description: "",
         });
@@ -1600,7 +1604,7 @@ const SubAdminDashboard = () => {
                           <div>
                             <Label>Category Name *</Label>
                             <Input 
-                              placeholder="e.g., CA Foundation" 
+                              placeholder="e.g., CA Final, CA Inter" 
                               value={newCategory.name}
                               onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
                               className="mt-2"
@@ -1609,7 +1613,7 @@ const SubAdminDashboard = () => {
                           <div>
                             <Label>URL Slug (optional)</Label>
                             <Input 
-                              placeholder="e.g., ca-foundation" 
+                              placeholder="e.g., CA Final, CA Inter" 
                               value={newCategory.slug}
                               onChange={(e) => setNewCategory({ ...newCategory, slug: e.target.value })}
                               className="mt-2"

@@ -116,12 +116,8 @@ const CreateCourse = () => {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ca-foundation">CA Foundation</SelectItem>
-                    <SelectItem value="ca-intermediate">CA Intermediate</SelectItem>
                     <SelectItem value="ca-final">CA Final</SelectItem>
-                    <SelectItem value="cs-foundation">CS Foundation</SelectItem>
-                    <SelectItem value="cs-executive">CS Executive</SelectItem>
-                    <SelectItem value="cs-professional">CS Professional</SelectItem>
+                    <SelectItem value="ca-intermediate">CA Intermediate</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

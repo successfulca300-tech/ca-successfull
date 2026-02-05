@@ -19,7 +19,7 @@ const HeroSection = () => {
               CA Successful
             </h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto lg:mx-0 animate-fade-in leading-relaxed" style={{ animationDelay: "0.2s" }}>
-              Your journey to becoming a successful Chartered Accountant starts here. Expert guidance, comprehensive study materials, and proven results from India's most trusted CA coaching institute.
+              Your journey to becoming a successful Chartered Accountant starts here. Structured guidance, comprehensive study materials, and focused practice built for CA exams.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-fade-in" style={{ animationDelay: "0.3s" }}>
               <Link to="/test-series">
@@ -46,9 +46,9 @@ const HeroSection = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent flex items-end p-8">
                   <div className="text-primary-foreground">
                     <p className="text-xl md:text-2xl font-bold mb-2">
-                      "Success is not final, failure is not fatal"
+
                     </p>
-                    <p className="text-sm opacity-90">- Keep Learning, Keep Growing</p>
+                    <p className="text-sm opacity-90"> Keep Learning, Keep Growing</p>
                   </div>
                 </div>
               </div>

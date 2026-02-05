@@ -56,8 +56,29 @@ export const uploadPaper = async (req, res) => {
       });
     }
 
-    // Check if test series exists
-    const testSeries = await TestSeries.findById(testSeriesId);
+    // Resolve testSeriesId to DB TestSeries (allow shorthand s1..s4 and create minimal doc if needed)
+    let testSeries = null;
+    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+      testSeries = await TestSeries.findById(testSeriesId);
+    }
+    if (!testSeries) {
+      const seriesType = String(testSeriesId || '').toUpperCase();
+      if (['S1','S2','S3','S4'].includes(seriesType)) {
+        testSeries = await TestSeries.findOne({ seriesType });
+        if (!testSeries) {
+          testSeries = await TestSeries.create({
+            title: `Test Series ${seriesType}`,
+            seriesType,
+            seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+            category: null,
+            createdBy: req.user._id,
+            publishStatus: 'published',
+            isActive: true,
+          });
+        }
+      }
+    }
+
     if (!testSeries) {
       return res.status(404).json({
         success: false,
@@ -66,7 +87,7 @@ export const uploadPaper = async (req, res) => {
     }
 
     // Check authorization - user must be the creator or admin
-    if (testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (testSeries.createdBy && testSeries.createdBy.toString && testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to upload papers for this test series'
@@ -97,7 +118,7 @@ export const uploadPaper = async (req, res) => {
     let paper;
     try {
       paper = await TestSeriesPaper.create({
-        testSeriesId,
+        testSeriesId: testSeries._id,
         group,
         subject,
         paperType,
@@ -110,6 +131,8 @@ export const uploadPaper = async (req, res) => {
         fileSizeBytes: req.file.size,
         availabilityDate: new Date(),
         isAvailable: true,
+        status: 'published',
+        uploadedByRole: req.user.role || 'subadmin',
         createdBy: req.user._id
       });
 
@@ -175,8 +198,20 @@ export const getPapersByTestSeries = async (req, res) => {
     const { testSeriesId } = req.params;
     const { group, subject } = req.query;
 
-    // Build query
-    const query = { testSeriesId, isAvailable: true };
+    // Resolve and query for published papers
+    let queryTestSeries = null;
+    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+      queryTestSeries = testSeriesId;
+    } else {
+      const seriesType = String(testSeriesId || '').toUpperCase();
+      if (['S1','S2','S3','S4'].includes(seriesType)) {
+        const ts = await TestSeries.findOne({ seriesType });
+        if (ts) queryTestSeries = ts._id;
+      }
+    }
+    if (!queryTestSeries) return res.status(200).json({ success: true, count: 0, data: [] });
+
+    const query = { testSeriesId: queryTestSeries, status: 'published' };
     if (group) query.group = group;
     if (subject) query.subject = subject;
 
@@ -208,7 +243,20 @@ export const getPapersGroupedBySubject = async (req, res) => {
     const { testSeriesId } = req.params;
     const { group, series } = req.query;
 
-    const query = { testSeriesId, isAvailable: true };
+    // Resolve testSeries and query only published papers
+    let queryTestSeries = null;
+    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+      queryTestSeries = testSeriesId;
+    } else {
+      const seriesType = String(testSeriesId || '').toUpperCase();
+      if (['S1','S2','S3','S4'].includes(seriesType)) {
+        const ts = await TestSeries.findOne({ seriesType });
+        if (ts) queryTestSeries = ts._id;
+      }
+    }
+    if (!queryTestSeries) return res.status(200).json({ success: true, data: [] });
+
+    const query = { testSeriesId: queryTestSeries, status: 'published' };
     if (group) query.group = group;
     if (series) query.series = series;
 
@@ -334,6 +382,10 @@ export const updatePaper = async (req, res) => {
     if (paperNumber) paper.paperNumber = paperNumber;
     if (syllabusPercentage) paper.syllabusPercentage = syllabusPercentage;
     if (isAvailable !== undefined) paper.isAvailable = isAvailable;
+    // Allow updating visibility status explicitly (e.g., 'published' | 'draft' | 'archived')
+    if (req.body.status && ['draft','published','archived'].includes(req.body.status)) {
+      paper.status = req.body.status;
+    }
 
     await paper.save();
 

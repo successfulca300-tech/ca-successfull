@@ -55,6 +55,11 @@ router.post('/calculate-price', calculatePricing);
 router.get('/subadmin/my-papers', protect, subadmin, getMyPapers);
 router.get('/subadmin/my-series', protect, subadmin, getMyTestSeries);
 
+// Fixed-series managed endpoints (S1..S4)
+import { getFixedManagedSeries, upsertFixedTestSeries } from '../controllers/testSeriesManageController.js';
+router.get('/fixed/:fixedId', getFixedManagedSeries);
+router.put('/fixed/:fixedId/manage', protect, subadmin, upsertFixedTestSeries);
+
 // Paper management - specific routes BEFORE parameterized routes
 router.get('/:testSeriesId/papers/grouped', protect, getPapersGroupedBySubject);
 router.get('/:testSeriesId/papers-summary', getPapersSummary);

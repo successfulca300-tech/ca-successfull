@@ -139,13 +139,13 @@ const AdminDashboard = () => {
         totalRevenue: actualStats.totalRevenue || 0,
       });
 
-      const reqs = pendingReqsRes?.requests || pendingReqsRes || [];
+      const reqs = pendingReqsRes?.requests || [];
       console.log('Publish requests from API:', reqs);
       setPublishRequests(reqs);
-      setOffers(offersRes?.offers || offersRes || []);
-      setCategories(categoriesRes?.categories || categoriesRes || []);
-      setResources(coursesRes?.resources || coursesRes || []);
-      setUsers(usersRes?.users || usersRes || []);
+      setOffers(offersRes?.offers || []);
+      setCategories(categoriesRes?.categories || []);
+      setResources(coursesRes?.resources || []);
+      setUsers(usersRes?.users || []);
       // testimonials API returns paginated response: { testimonials, page, pages, total }
       const testArray = tRes?.testimonials ? tRes.testimonials : (Array.isArray(tRes) ? tRes : []);
       setTestimonials(testArray);
@@ -202,7 +202,7 @@ const AdminDashboard = () => {
 
   const handleApproveRequest = async (id: string) => {
     try {
-      await publishRequestAPI.moderate(id, { action: "approve" });
+      await publishRequestAPI.moderate(id, { action: "approved" });
       toast.success("Approved");
       fetchData();
     } catch (err) {
@@ -214,7 +214,7 @@ const AdminDashboard = () => {
   const handleRejectRequest = async (id: string) => {
     const reason = window.prompt("Reason for rejection (optional):") || "";
     try {
-      await publishRequestAPI.moderate(id, { action: "reject", rejectionReason: reason });
+      await publishRequestAPI.moderate(id, { action: "rejected", rejectionReason: reason });
       toast.success("Rejected");
       fetchData();
     } catch (err) {
@@ -281,7 +281,7 @@ const AdminDashboard = () => {
         await testimonialsAPI.update(editingTestimonial._id || editingTestimonial.id, { rating: newTestimonial.rating, comment: newTestimonial.comment, userName: newTestimonial.userName, courseTitle: newTestimonial.courseTitle });
         toast.success("Updated");
       } else {
-        await testimonialsAPI.create({ rating: newTestimonial.rating, comment: newTestimonial.comment, userName: newTestimonial.userName, courseTitle: newTestimonial.courseTitle });
+        await testimonialsAPI.create({ rating: newTestimonial.rating, comment: newTestimonial.comment, courseTitle: newTestimonial.courseTitle, userName: newTestimonial.userName });
         toast.success("Created");
       }
       setTestimonialDialogOpen(false);
@@ -385,11 +385,15 @@ const AdminDashboard = () => {
         toast.error("Fill all required fields");
         return;
       }
+      const offerPayload = {
+        ...newOffer,
+        discountType: newOffer.discountType as 'percentage' | 'fixed',
+      };
       if (editingOffer) {
-        await offersAPI.update(editingOffer._id || editingOffer.id, newOffer);
+        await offersAPI.update(editingOffer._id || editingOffer.id, offerPayload);
         toast.success("Offer updated");
       } else {
-        await offersAPI.create(newOffer);
+        await offersAPI.create(offerPayload);
         toast.success("Offer created");
       }
       setOfferDialogOpen(false);
@@ -504,8 +508,8 @@ const AdminDashboard = () => {
     try {
       // Collect text settings
       const siteNameInput = document.querySelector('input[placeholder="CA Successful"]') as HTMLInputElement;
-      const contactEmailInput = document.querySelector('input[type="email"][placeholder="info@casuccessful.com"]') as HTMLInputElement;
-      const contactPhoneInput = document.querySelector('input[placeholder="+91 98765 43210"]') as HTMLInputElement;
+      const contactEmailInput = document.querySelector('input[type="email"][placeholder="SuccessfulCa300@gmail.com"]') as HTMLInputElement;
+      const contactPhoneInput = document.querySelector('input[placeholder="+91 91096 47073"]') as HTMLInputElement;
       const addressInput = document.querySelector('input[placeholder="123 Education Street, Knowledge City, India - 110001"]') as HTMLInputElement;
 
       const updateData: any = {};
@@ -1130,16 +1134,16 @@ const AdminDashboard = () => {
                           <Label>Contact Email</Label>
                           <Input
                             type="email"
-                            placeholder="info@casuccessful.com"
-                            defaultValue={settings.contactEmail || "info@casuccessful.com"}
+                            placeholder="SuccessfulCa300@gmail.com"
+                            defaultValue={settings.contactEmail || "SuccessfulCa300@gmail.com"}
                             className="mt-2"
                           />
                         </div>
                         <div>
                           <Label>Contact Phone</Label>
                           <Input
-                            placeholder="+91 98765 43210"
-                            defaultValue={settings.contactPhone || "+91 98765 43210"}
+                            placeholder="+91 91096 47073"
+                            defaultValue={settings.contactPhone || "+91 91096 47073"}
                             className="mt-2"
                           /> 
                         </div>

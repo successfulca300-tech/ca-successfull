@@ -8,27 +8,27 @@ import {
 const faqs = [
   {
     question: "What is CA Successful?",
-    answer: "CA Successful is India's premier online coaching platform for Chartered Accountancy (CA) aspirants. We provide comprehensive test series, study materials, and expert guidance designed by AIR holders to help you excel in your CA exams."
+    answer: "CA Successful is a dedicated online platform for Chartered Accountancy (CA) aspirants. We provide test series, study materials, and guidance designed to help you prepare effectively for CA exams."
   },
   {
     question: "How do I enroll in a test series?",
-    answer: "Enrolling is simple! Visit our Test Series page, select your preferred series (S1, S2, S3, or S4), choose your subjects, and complete the payment. You'll get instant access to download papers and start your preparation."
+    answer: "Enrolling is simple! Visit our Test Series page, select your preferred series (Full Syllabus : 15 papers, 50% Syllabus : 10 papers, 30% Syllabus : 15 papers, CA Successful Specials : 30 special papers), choose your subjects, and complete the payment. You'll get instant access to download papers and start your preparation."
   },
   {
     question: "What subjects are covered in the test series?",
-    answer: "Our test series covers all major CA subjects including Accounting, Corporate Laws, Cost and Management Accounting, Taxation, Financial Reporting, Strategic Cost Management, Risk Management, and more. You can select specific subjects based on your needs."
+    answer: "Our test series covers all major CA subjects (FR) Financial Reporting, AFM (Advanced Financial Management), Audit, DT (Direct tax & International taxation), IDT (Indirect tax and Custom). You can select specific subjects based on your needs."
   },
   {
     question: "How long do I have access to the test series?",
-    answer: "Once purchased, you get lifetime access to the test series materials. You can download papers, attempt them at your convenience, and access solutions and feedback whenever needed."
+    answer: "Once purchased, you get access to the test series materials until your respective attend. You can download papers, attempt them at your convenience, and access solutions and feedback whenever needed."
   },
   {
     question: "What is the evaluation process?",
-    answer: "After attempting a test paper, upload your answer sheet within the deadline. Our expert evaluators, including AIR holders, will provide detailed feedback, marking scheme, solutions, performance analytics, and all-India rankings."
+    answer: "After attempting a test paper, upload your answer sheet within the deadline. Our evaluators provide detailed feedback, marking scheme, solutions, and performance analytics to help you improve."
   },
   {
     question: "Is there a refund policy?",
-    answer: "We offer a 7-day refund policy for test series purchases. If you're not satisfied with the quality of materials within the first week, you can request a full refund. Contact our support team for assistance."
+    answer: "No. All purchases on CA Successful are final and non‑refundable."
   },
   {
     question: "Can I get personalized doubt clearing?",
@@ -36,7 +36,7 @@ const faqs = [
   },
   {
     question: "Are the test papers updated regularly?",
-    answer: "Absolutely. Our test papers are regularly updated to reflect the latest exam patterns, syllabus changes, and current affairs. We ensure our materials stay relevant and comprehensive for your exam preparation."
+    answer: "Absolutely. Our test papers are regularly updated to reflect the latest exam patterns, syllabus changes. We ensure our materials stay relevant and comprehensive for your exam preparation."
   }
 ];
 

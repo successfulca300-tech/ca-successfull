@@ -55,11 +55,11 @@ export interface FixedSeries {
 export const FIXED_TEST_SERIES: FixedSeries[] = [
   {
     _id: 's1',
-    title: 'S1 Full Syllabus Test Series',
+    title: 'Full Syllabus Test Series',
     description: 'Comprehensive full-syllabus test series with 3 series (Series 1, 2, 3), each containing 1 test paper per subject.',
     seriesType: 'S1',
     seriesTypeLabel: 'Full Syllabus',
-    price: 2000,
+    price: 450,
     mode: 'Online',
     group: 'Both',
     subjects: ['FR', 'AFM', 'Audit', 'DT', 'IDT'],
@@ -84,7 +84,7 @@ export const FIXED_TEST_SERIES: FixedSeries[] = [
       'Performance Analytics',
     ],
     syllabusBreakdown: `
-S1 Full Syllabus Test Series Structure:
+Full Syllabus Test Series Structure:
 
 Series: Series 1, Series 2, Series 3 (3 complete series)
 
@@ -103,9 +103,9 @@ Coverage:
 - Difficulty progression from beginner to advanced
     `,
     seriesDates: {
-      series1UploadDate: 'Papers will be uploaded by 10th December 2025',
-      series2UploadDate: 'Papers will be uploaded by 15th February 2026',
-      series3UploadDate: 'Papers will be uploaded by 20th March 2026',
+      series1UploadDate: 'Papers will be uploaded from 1st February 2025',
+      series2UploadDate: 'Papers will be uploaded from 7th March 2026',
+      series3UploadDate: 'Papers will be uploaded from 5th April 2026',
       group1SubmissionDate: '25th April 2026',
       group2SubmissionDate: '30th April 2026',
     },
@@ -133,7 +133,7 @@ Coverage:
         subjects: 'Audit and Assurance',
       },
     ],
-    cardTitle: 'S1 Full Syllabus',
+    cardTitle: 'Full Syllabus',
     cardDescription: '3 Series × 1 Paper Per Subject = Complete Preparation',
     subjectDateSchedule: [
       { subject: 'FR', series1Date: '10-12-2025', series2Date: '15-02-2026', series3Date: '21-03-2026' },
@@ -147,7 +147,7 @@ Coverage:
   },
   {
     _id: 's2',
-    title: 'S2 50% Syllabus Test Series',
+    title: '50% Syllabus Test Series',
     description: 'Focused test series covering the most important 50% of the syllabus. 2 test papers per subject across all groups.',
     seriesType: 'S2',
     seriesTypeLabel: '50% Syllabus',
@@ -159,7 +159,7 @@ Coverage:
       subjectPrice: 450,
       comboPrice: 1200,
       allSubjectsPrice: 2000,
-      paperPrice: 400,
+      paperPrice: 450,
     },
     discountCodes: [
       { code: 'CA2026', type: 'flat', value: 100, label: 'CA2026 - ₹100 off' },
@@ -175,7 +175,7 @@ Coverage:
       'Performance Analytics',
     ],
     syllabusBreakdown: `
-S2 50% Syllabus Test Series Structure:
+50% Syllabus Test Series Structure:
 
 Series: Group-wise (NOT series-wise)
 
@@ -205,14 +205,14 @@ Coverage:
       'DT': 2,
       'IDT': 2,
     },
-    cardTitle: 'S2 50% Syllabus',
+    cardTitle: '50% Syllabus',
     cardDescription: '10 Papers × High-Yield Topics = Smart Prep',
     isActive: true,
     displayOrder: 2,
   },
   {
     _id: 's3',
-    title: 'S3 30% Syllabus Test Series',
+    title: '30% Syllabus Test Series',
     description: 'Short, high-yield test series covering the top 30% topics. 3 test papers per subject across all groups.',
     seriesType: 'S3',
     seriesTypeLabel: '30% Syllabus',
@@ -224,7 +224,7 @@ Coverage:
       subjectPrice: 450,
       comboPrice: 1200,
       allSubjectsPrice: 2000,
-      paperPrice: 400,
+      paperPrice: 450,
     },
     discountCodes: [
       { code: 'CA2026', type: 'flat', value: 100, label: 'CA2026 - ₹100 off' },
@@ -240,7 +240,7 @@ Coverage:
       'Performance Analytics',
     ],
     syllabusBreakdown: `
-S3 30% Syllabus Test Series Structure:
+30% Syllabus Test Series Structure:
 
 Series: Group-wise (NOT series-wise)
 
@@ -270,14 +270,14 @@ Coverage:
       'DT': 3,
       'IDT': 3,
     },
-    cardTitle: 'S3 30% Syllabus',
+    cardTitle: '30% Syllabus',
     cardDescription: '15 Papers × Critical Topics = Quick Revision',
     isActive: true,
     displayOrder: 3,
   },
   {
     _id: 's4',
-    title: 'S4 CA Successful Specials',
+    title: 'CA Successful Specials',
     description: 'Special curated test series with 6 papers per subject combining 100%, 50%, and 30% syllabus coverage.',
     seriesType: 'S4',
     seriesTypeLabel: 'CA Successful Specials',
@@ -286,10 +286,10 @@ Coverage:
     group: 'Both',
     subjects: ['FR', 'AFM', 'Audit', 'DT', 'IDT'],
     pricing: {
-      subjectPrice: 450,
-      comboPrice: 1200,
-      allSubjectsPrice: 2000,
-      paperPrice: 400,
+      subjectPrice: 1200,
+      comboPrice: 3600,
+      allSubjectsPrice: 6000,
+      paperPrice: 450,
     },
     discountCodes: [
       { code: 'CA2026', type: 'flat', value: 100, label: 'CA2026 - ₹100 off' },
@@ -306,7 +306,7 @@ Coverage:
       'Expert Curated Papers',
     ],
     syllabusBreakdown: `
-S4 CA Successful Specials Test Series Structure:
+CA Successful Specials Test Series Structure:
 
 Series: Group-wise (NOT series-wise)
 
@@ -341,7 +341,7 @@ Coverage:
       'DT': 6,
       'IDT': 6,
     },
-    cardTitle: 'S4 CA Successful Specials',
+    cardTitle: 'CA Successful Specials',
     cardDescription: '30 Papers × All Levels = Complete Mastery',
     isActive: true,
     displayOrder: 4,

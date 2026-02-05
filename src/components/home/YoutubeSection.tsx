@@ -1,29 +1,47 @@
-import { ShoppingCart, FileText, CheckCircle, Star } from "lucide-react";
+import { LogIn, Search, FileText, ListChecks, CreditCard, LayoutDashboard, Upload } from "lucide-react";
 
 const steps = [
   {
-    icon: ShoppingCart,
-    title: "Select & Purchase",
-    description: "Choose your test series (S1, S2, S3, or S4), select subjects and payment method to get instant access.",
-    number: "1"
+    icon: LogIn,
+    title: "Login / Register",
+    description: "Sign in or create your account to start the test series journey.",
+    number: "1",
+  },
+  {
+    icon: Search,
+    title: "Open Test Series",
+    description: "Visit Test Series page and explore Full Syllabus, 50% Syllabus , 30% Syllabus , or CA Successful Specials as per your need.",
+    number: "2",
   },
   {
     icon: FileText,
-    title: "Access Test Papers",
-    description: "Download high-quality test papers designed by Teachers covering full syllabus to advanced topics.",
-    number: "2"
+    title: "Check Series Details",
+    description: "Read description, schedule, subjects, and mode before you proceed.",
+    number: "3",
   },
   {
-    icon: CheckCircle,
-    title: "Attempt & Upload",
-    description: "Solve papers within the deadline and upload your answer sheets for detailed evaluation.",
-    number: "3"
+    icon: ListChecks,
+    title: "Select Group & Subjects",
+    description: "Choose group, subjects, and for Full Syllabus Test Series select series 1/2/3. Price updates instantly.",
+    number: "4",
   },
   {
-    icon: Star,
-    title: "Get Feedback",
-    description: "Receive comprehensive feedback with solutions, performance analytics, and all-India rankings.",
-    number: "4"
+    icon: CreditCard,
+    title: "Buy / Enroll",
+    description: "Make payment for paid series or enroll directly for free series.",
+    number: "5",
+  },
+  {
+    icon: LayoutDashboard,
+    title: "Access in Dashboard",
+    description: "After purchase, the test series appears in your dashboard.",
+    number: "6",
+  },
+  {
+    icon: Upload,
+    title: "Attempt & Get Feedback",
+    description: "Download papers, upload answers, and receive expert evaluation.",
+    number: "7",
   },
 ];
 
@@ -33,7 +51,7 @@ const YoutubeSection = () => {
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="section-title">How to Access Test Series</h2>
-          <p className="text-muted-foreground mt-4 text-lg">Simple 4-step process to purchase, attempt, and get expert feedback</p>
+          <p className="text-muted-foreground mt-4 text-lg">Simple 7-step process to login, purchase, attempt, and get expert feedback</p>
         </div>
 
         {/* Vertical Timeline with Zig-Zag */}

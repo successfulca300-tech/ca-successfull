@@ -100,74 +100,53 @@ export const uploadPaper = async (req, res) => {
 
     console.log('[Upload] Processed fields:', { group, subject, paperType, paperNumber, syllabusPercentage, series });
 
-    // Resolve testSeriesId - handle shorthand (s1, s2, etc) or ObjectId
-    let actualTestSeriesId = testSeriesId;
+    // Resolve testSeriesId (must produce a valid TestSeries ObjectId)
     let testSeries = null;
-    
-    console.log('[Upload] testSeriesId from URL:', testSeriesId);
-    
-    // Check if it's a valid MongoDB ObjectId
+    let resolvedTestSeriesId = null;
+
+    // If provided ID is a valid ObjectId, try to find it
     if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
-      // Try to find by MongoDB ObjectId
       testSeries = await TestSeries.findById(testSeriesId);
-      console.log('[Upload] Found by ObjectId:', !!testSeries);
-      
-      if (testSeries) {
-        actualTestSeriesId = testSeries._id.toString();
-        console.log('[Upload] Test series found:', testSeries.title, 'Type:', testSeries.seriesType);
-      }
-    }
-    
-    // If not found by ObjectId, try by seriesType (handle S1, S2, S3, S4 uppercase)
-    if (!testSeries) {
-      const seriesType = testSeriesId.toUpperCase();
-      testSeries = await TestSeries.findOne({ seriesType });
-      console.log('[Upload] Found by seriesType:', !!testSeries, 'SearchType:', seriesType);
-      
-      if (testSeries) {
-        actualTestSeriesId = testSeries._id.toString();
-        console.log('[Upload] Test series found:', testSeries.title, 'Type:', testSeries.seriesType);
-      }
-    }
-    
-    // If still not found, accept shorthand format (s1, s2, etc) for frontend-generated IDs
-    if (!testSeries) {
-      console.log('[Upload] No TestSeries document found, using provided ID as shorthand:', testSeriesId);
-      // Normalize shorthand to lowercase for consistency
-      actualTestSeriesId = testSeriesId.toLowerCase();
+      if (testSeries) resolvedTestSeriesId = testSeries._id.toString();
     }
 
-    // Check authorization - if testSeries exists, check ownership
-    if (testSeries) {
-      const isAuthorized = (testSeries.createdBy && testSeries.createdBy.toString() === req.user._id.toString()) || req.user.role === 'admin';
-      if (!isAuthorized) {
-        console.log('[Upload] ERROR: Not authorized. CreatedBy:', testSeries.createdBy, 'UserId:', req.user._id);
-        return res.status(403).json({ success: false, message: 'Not authorized to upload papers for this test series' });
+    // If not found, treat param as seriesType shorthand (s1, s2, etc.) and find or create DB doc
+    if (!testSeries) {
+      const seriesType = String(testSeriesId || '').toUpperCase();
+      if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+        testSeries = await TestSeries.findOne({ seriesType });
+        if (!testSeries) {
+          // Create a minimal TestSeries document so uploads can be linked and users can access content
+          testSeries = await TestSeries.create({
+            title: `Test Series ${seriesType}`,
+            seriesType,
+            seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+            category: null,
+            createdBy: req.user._id,
+            publishStatus: 'published',
+            isActive: true,
+          });
+        }
+        resolvedTestSeriesId = testSeries._id.toString();
       }
-    } else {
-      // For shorthand format (s1, s2, etc.) without DB entry, allow SubAdmin and Admin to upload
-      if (req.user.role !== 'admin' && req.user.role !== 'subadmin') {
-        console.log('[Upload] ERROR: Only admin or subadmin can upload papers. User role:', req.user.role);
-        return res.status(403).json({ success: false, message: 'Only admins and subadmins can upload papers for this test series' });
-      }
-      console.log('[Upload] Authorization OK - SubAdmin/Admin uploading for shorthand series:', actualTestSeriesId);
+    }
+
+    if (!resolvedTestSeriesId) {
+      return res.status(400).json({ success: false, message: 'Invalid testSeriesId' });
+    }
+
+    // Authorization: if testSeries exists and has a creator, allow only creator or admin to upload; otherwise allow subadmin/admin
+    if (testSeries && testSeries.createdBy && testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to upload papers for this test series' });
     }
 
     // Validate series for S1
     let seriesValue = series || null;
     if (testSeries && testSeries.seriesType === 'S1' && !seriesValue) {
-      console.log('[Upload] ERROR: Series required for S1 but got:', seriesValue);
       return res.status(400).json({ success: false, message: 'Series is required for S1' });
     }
     if (testSeries && ['S2', 'S3', 'S4'].includes(testSeries.seriesType)) {
       seriesValue = null;
-    }
-    // For shorthand format, infer series type from testSeriesId
-    if (!testSeries && actualTestSeriesId.toLowerCase().startsWith('s')) {
-      const inferred = actualTestSeriesId.toUpperCase();
-      if (['S2', 'S3', 'S4'].includes(inferred)) {
-        seriesValue = null;
-      }
     }
 
     // Upload file to Appwrite
@@ -181,9 +160,9 @@ export const uploadPaper = async (req, res) => {
 
     console.log('[Upload] File uploaded to Appwrite successfully. FileId:', appwriteResponse.fileId);
 
-    // Create paper record in MongoDB
+    // Create paper record in MongoDB (status set to 'published' for subadmin uploads)
     const paper = await TestSeriesPaper.create({
-      testSeriesId: actualTestSeriesId,
+      testSeriesId: resolvedTestSeriesId,
       group,
       subject,
       paperType,
@@ -197,6 +176,8 @@ export const uploadPaper = async (req, res) => {
       fileSizeBytes: fileBuffer.length,
       availabilityDate: availabilityDate || new Date(),
       isAvailable: true,
+      status: 'published',
+      uploadedByRole: req.user.role || 'subadmin',
       createdBy: req.user._id,
     });
 
@@ -237,40 +218,44 @@ export const getPapersByTestSeries = async (req, res) => {
     let { testSeriesId } = req.params;
     const { group, subject, series, paperType } = req.query;
 
-    // Resolve testSeriesId - handle shorthand (s1, s2, etc) or ObjectId
+    // Resolve to DB TestSeries ObjectId (create minimal doc for shorthand if needed)
     let testSeries = null;
-    
+    let resolvedTestSeriesId = null;
+
     if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
       testSeries = await TestSeries.findById(testSeriesId);
-    }
-    
-    if (!testSeries) {
-      const seriesType = testSeriesId.toUpperCase();
-      testSeries = await TestSeries.findOne({ seriesType });
-    }
-    
-    // Use ID as-is for query (both shorthand and ObjectId should work)
-    let queryId = testSeries ? testSeries._id.toString() : testSeriesId;
-    // Normalize shorthand to lowercase for consistency with upload
-    if (!testSeries && testSeriesId) {
-      queryId = testSeriesId.toLowerCase();
+      if (testSeries) resolvedTestSeriesId = testSeries._id.toString();
     }
 
-    const query = { testSeriesId: queryId };
+    if (!testSeries) {
+      const seriesType = String(testSeriesId || '').toUpperCase();
+      if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+        testSeries = await TestSeries.findOne({ seriesType });
+        if (!testSeries) {
+          testSeries = await TestSeries.create({
+            title: `Test Series ${seriesType}`,
+            seriesType,
+            seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+            category: null,
+            createdBy: null,
+            publishStatus: 'published',
+            isActive: true,
+          });
+        }
+        resolvedTestSeriesId = testSeries._id.toString();
+      }
+    }
+
+    if (!resolvedTestSeriesId) {
+      return res.status(404).json({ success: false, message: 'Test series not found' });
+    }
+
+    const query = { testSeriesId: resolvedTestSeriesId, status: 'published' };
 
     if (group) query.group = group;
     if (subject) query.subject = subject;
     if (series) query.series = series;
     if (paperType) query.paperType = paperType;
-
-    // Check if test series is published - only if document exists in DB
-    if (testSeries) {
-      if (testSeries.publishStatus !== 'published' || !testSeries.isActive) {
-        if (!req.user || (req.user.role !== 'admin' && req.user._id.toString() !== testSeries.createdBy._id.toString())) {
-          return res.status(403).json({ success: false, message: 'Access denied' });
-        }
-      }
-    }
     // If no TestSeries in DB, papers are accessible if they exist (shorthand format)
 
     const papers = await TestSeriesPaper.find(query)
@@ -295,20 +280,27 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     console.log('[Access Control] getPapersGroupedBySubject called with testSeriesId:', testSeriesId);
 
-    // Normalize shorthand IDs to lowercase for consistency with paper storage
-    let normalizedTestSeriesId = testSeriesId;
-    if (testSeriesId && typeof testSeriesId === 'string' && !mongoose.Types.ObjectId.isValid(testSeriesId)) {
-      // It's not an ObjectId, so it's likely shorthand - normalize to lowercase
-      normalizedTestSeriesId = testSeriesId.toLowerCase();
-      console.log('[Access Control] Normalized testSeriesId from', testSeriesId, 'to', normalizedTestSeriesId);
+    // Resolve testSeriesId to DB TestSeries ObjectId
+    let resolvedTestSeries = null;
+    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+      resolvedTestSeries = await TestSeries.findById(testSeriesId);
+    } else {
+      const seriesType = String(testSeriesId || '').toUpperCase();
+      if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+        resolvedTestSeries = await TestSeries.findOne({ seriesType });
+      }
+    }
+
+    if (!resolvedTestSeries) {
+      console.log('[Access Control] No DB TestSeries found for', testSeriesId);
+      return res.json({ success: true, papers: {} });
     }
 
     // CRITICAL ACCESS CONTROL: Check enrollment and get purchased subjects
-    // Use normalized testSeriesId
     const Enrollment = (await import('../models/Enrollment.js')).default;
     const enrollments = await Enrollment.find({
       userId: userId,
-      testSeriesId: normalizedTestSeriesId,
+      testSeriesId: resolvedTestSeries._id,
       paymentStatus: 'paid'
     });
 
@@ -350,15 +342,14 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     console.log(`[Access Control] Extracted unique subjects:`, Array.from(uniqueSubjects));
 
-    // Query papers using the normalized testSeriesId format
-    const query = { testSeriesId: normalizedTestSeriesId, isAvailable: true, subject: { $in: Array.from(uniqueSubjects) } };
+    // Query papers using the resolved TestSeries ObjectId; only published content
+    const query = { testSeriesId: resolvedTestSeries._id, status: 'published', subject: { $in: Array.from(uniqueSubjects) } };
 
     if (group) query.group = group;
     if (series) query.series = series;
 
     console.log('[Access Control] Querying papers with:', query);
 
-    // Use the normalized testSeriesId for paper lookup
     const papers = await TestSeriesPaper.find(query)
       .populate('createdBy', 'name')
       .sort({ subject: 1, paperType: 1, paperNumber: 1, createdAt: 1 });

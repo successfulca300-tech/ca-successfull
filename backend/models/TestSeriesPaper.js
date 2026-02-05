@@ -3,8 +3,9 @@ import mongoose from 'mongoose';
 const testSeriesPaperSchema = new mongoose.Schema(
   {
     testSeriesId: {
-      type: mongoose.Schema.Types.Mixed,  // Allow both ObjectId and String (shorthand like 's1')
-      required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TestSeries',
+      required: [true, 'testSeriesId is required'],
     },
     // Series info (only for S1, null for S2, S3, S4)
     series: {
@@ -69,6 +70,18 @@ const testSeriesPaperSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Status - single source of truth for visibility
+    status: {
+      type: String,
+      enum: ['draft','published','archived'],
+      default: 'published',
+      index: true,
+    },
+    uploadedByRole: {
+      type: String,
+      enum: ['user','subadmin','admin'],
+      default: 'subadmin',
+    },
     // Status
     isEvaluated: {
       type: Boolean,
@@ -80,19 +93,16 @@ const testSeriesPaperSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
   },
   {
     timestamps: true,
   }
 );
 
-// Create index for common queries
+// Create indexes for common queries and visibility filtering
 testSeriesPaperSchema.index({ testSeriesId: 1, group: 1, subject: 1, paperType: 1 });
-
+// Speed up queries for published papers
+testSeriesPaperSchema.index({ testSeriesId: 1, status: 1 });
 const TestSeriesPaper = mongoose.model('TestSeriesPaper', testSeriesPaperSchema);
 
 export default TestSeriesPaper;

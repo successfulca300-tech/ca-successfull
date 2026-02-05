@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 
 function htmlPage(title = 'File not available', message = 'The requested file is not available.', detail = '') {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#0f172a;"><div style="max-width:720px;padding:28px;border-radius:8px;background:#fff;border:1px solid #e6edf3;box-shadow:0 6px 24px rgba(2,6,23,0.04);"><h1 style="margin:0 0 8px;font-size:20px">${title}</h1><p style="margin:0 0 12px;color:#475569">${message}</p>${detail ? `<p style="margin:0;font-size:13px;color:#94a3b8">${detail}</p>` : ''}</div></body></html>`;
@@ -47,18 +48,94 @@ export const generateFileViewToken = async (req, res) => {
     const Enrollment = (await import('../models/Enrollment.js')).default;
     let allowed = false;
 
+    // Helper to build flexible query for testSeries (match ObjectId or shorthand string)
+    const buildTestSeriesQuery = async (tsParam) => {
+      if (!tsParam) return { testSeriesId: tsParam };
+      if (mongoose.Types.ObjectId.isValid(tsParam)) {
+        try {
+          const oid = new mongoose.mongo.ObjectId(tsParam);
+          return { $or: [{ testSeriesId: oid }, { testSeriesId: String(tsParam) }] };
+        } catch (e) {
+          return { testSeriesId: String(tsParam) };
+        }
+      }
+      const seriesType = String(tsParam || '').toUpperCase();
+      if (['S1','S2','S3','S4'].includes(seriesType)) {
+        const ts = await (await import('../models/TestSeries.js')).default.findOne({ seriesType });
+        const shorthandLower = seriesType.toLowerCase();
+        if (ts) return { $or: [{ testSeriesId: ts._id }, { testSeriesId: shorthandLower }] };
+        return { testSeriesId: shorthandLower };
+      }
+      return { testSeriesId: tsParam };
+    };
+
     if (courseId) {
       const e = await Enrollment.findOne({ userId: user._id, courseId, paymentStatus: 'paid' });
       if (e) allowed = true;
     }
-    if (testSeriesId) {
-      const e = await Enrollment.findOne({ userId: user._id, testSeriesId, paymentStatus: 'paid' });
+
+    // If a file is a test series paper, enforce purchased-subject level access
+    let requiredSubject = null;
+    let paperFound = null;
+    if (fileId || fileUrl) {
+      const TestSeriesPaper = (await import('../models/TestSeriesPaper.js')).default;
+      // Try matching by appwriteFileId
+      if (fileId) paperFound = await TestSeriesPaper.findOne({ appwriteFileId: fileId });
+      // If not found, try matching by publicFileUrl
+      if (!paperFound && fileUrl) paperFound = await TestSeriesPaper.findOne({ publicFileUrl: fileUrl });
+      // If still not found, try extracting fileId from URL and matching
+      if (!paperFound && fileUrl) {
+        const match = String(fileUrl).match(/\/files\/([^\/]+)\/view/);
+        if (match) {
+          const extracted = match[1];
+          paperFound = await TestSeriesPaper.findOne({ appwriteFileId: extracted });
+        }
+      }
+
+      if (paperFound) {
+        requiredSubject = paperFound.subject;
+        console.log('[FileView] Paper found', { paperId: paperFound._id, subject: requiredSubject, paperTestSeriesId: paperFound.testSeriesId });
+        // Resolve the testSeriesId for the paper (use DB id if present)
+        const paperTsId = paperFound.testSeriesId;
+        const tsQuery = await buildTestSeriesQuery(paperTsId);
+        // Find all paid enrollments matching testSeriesId
+        const paidEnrollments = await Enrollment.find({ userId: user._id, paymentStatus: 'paid', ...tsQuery });
+        console.log('[FileView] Paid enrollments for paper found (count):', paidEnrollments.length, 'ids:', paidEnrollments.map(e => e._id));
+        if (paidEnrollments && paidEnrollments.length > 0) {
+          // Merge purchasedSubjects
+          const allSubjects = new Set();
+          for (const en of paidEnrollments) {
+            if (en.purchasedSubjects && Array.isArray(en.purchasedSubjects)) {
+              en.purchasedSubjects.forEach(s => allSubjects.add(s));
+            }
+          }
+          const merged = Array.from(allSubjects);
+          console.log('[FileView] Merged purchasedSubjects for user:', merged);
+          // If no purchasedSubjects, treat as full access
+          if (merged.length === 0) {
+            allowed = true;
+          } else {
+            // purchasedSubjects entries might be like 'series1-FR'
+            const subjectAllowed = merged.some(ps => ps === requiredSubject || ps.endsWith('-' + requiredSubject));
+            console.log('[FileView] subjectAllowed?', subjectAllowed);
+            if (subjectAllowed) allowed = true;
+          }
+        }
+      }
+    }
+
+    if (!allowed && testSeriesId) {
+      const tsQuery = await buildTestSeriesQuery(testSeriesId);
+      const e = await Enrollment.findOne({ userId: user._id, paymentStatus: 'paid', ...tsQuery });
       if (e) allowed = true;
     }
+
     if (bookId) {
       const e = await Enrollment.findOne({ userId: user._id, bookId, paymentStatus: 'paid' });
       if (e) allowed = true;
     }
+
+    console.log('[FileView] Access check result:', { allowed, user: user._id, fileId, fileUrl, testSeriesId, requiredSubject });
 
     // If no resource id provided, deny request (we require a reason)
     if (!courseId && !testSeriesId && !bookId) {
@@ -67,6 +144,7 @@ export const generateFileViewToken = async (req, res) => {
     }
 
     if (!allowed) {
+      console.warn('[FileView] Access denied for user', user._id, { fileId, fileUrl, testSeriesId, requiredSubject });
       const html = htmlPage('Access denied', 'You do not have access to this file. Please purchase or enroll to view it.');
       return res.status(403).set('Content-Type', 'text/html').send(html);
     }
@@ -160,7 +238,20 @@ export const proxyFileView = async (req, res) => {
     }
 
     // Use global fetch (Node 18+). Do not require external node-fetch dependency.
-    const fetchRes = await fetch(url, { headers: APPWRITE_API_KEY ? { 'X-Appwrite-Key': APPWRITE_API_KEY } : {} });
+    // Include both X-Appwrite-Key and x-appwrite-project headers when a project API key is used
+    const APPWRITE_PROJECT_ID = process.env.APPWRITE_PROJECT_ID;
+    const headers = {};
+    if (APPWRITE_API_KEY) headers['X-Appwrite-Key'] = APPWRITE_API_KEY;
+    if (APPWRITE_PROJECT_ID) headers['x-appwrite-project'] = APPWRITE_PROJECT_ID;
+
+    // If using a project-scoped API key, ensure project id is configured — return helpful error if missing
+    if (APPWRITE_API_KEY && !APPWRITE_PROJECT_ID) {
+      console.error('[FileView] Configuration error: APPWRITE_API_KEY is set but APPWRITE_PROJECT_ID is missing');
+      const html = htmlPage('Server configuration error', 'Storage project ID missing on server. Please contact the site administrator.');
+      return res.status(500).set('Content-Type', 'text/html').send(html);
+    }
+
+    const fetchRes = await fetch(url, { headers });
     if (!fetchRes.ok) {
       const status = fetchRes.status;
       let detail = '';

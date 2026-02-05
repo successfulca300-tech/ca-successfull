@@ -176,7 +176,9 @@ export const createResource = async (req, res) => {
 
     const resourceCategory = resourceCategoryMap[type] || 'notes';
 
-    // Build resource object
+    // Normalize price and build resource object
+    const priceNum = price !== undefined ? Number(price) : 0;
+
     const resourceData = {
       title: title.trim(),
       description: description.trim(),
@@ -185,11 +187,13 @@ export const createResource = async (req, res) => {
       type: type || 'other',
       url: url || null,
       tags: Array.isArray(tags) ? tags : [],
-      isPublic: isPublic !== undefined ? isPublic : true,
-      price: price !== undefined ? Number(price) : 0,
+      // Make free (price 0) resources public by default
+      isPublic: isPublic !== undefined ? isPublic : (priceNum === 0 ? true : true),
+      price: priceNum,
       duration: duration !== undefined ? Number(duration) : 0,
       createdBy: req.user._id,
-      status: req.user.role === 'admin' ? 'published' : 'draft',
+      // Auto-publish if admin OR if this is a free resource (price 0)
+      status: (req.user.role === 'admin' || priceNum === 0) ? 'published' : 'draft',
     };
 
     // If files are uploaded, upload them to Appwrite

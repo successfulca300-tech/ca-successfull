@@ -1,6 +1,7 @@
 import { Client, Storage, InputFile } from 'node-appwrite';
 import fs from 'fs';
 import path from 'path';
+import mongoose from 'mongoose';
 import TestSeries from '../models/TestSeries.js';
 import TestSeriesMedia from '../models/TestSeriesMedia.js';
 
@@ -10,7 +11,8 @@ import TestSeriesMedia from '../models/TestSeriesMedia.js';
  */
 export const uploadTestSeriesMedia = async (req, res) => {
   let tempPath = null;
-  try {
+    let dbSaved = false;
+    try {
     if (!req.files || !req.files.file) {
       return res.status(400).json({ message: 'No file provided' });
     }
@@ -127,82 +129,137 @@ export const uploadTestSeriesMedia = async (req, res) => {
     const endpointWithV1 = baseEndpoint.endsWith('/v1') ? baseEndpoint : `${baseEndpoint}/v1`;
     const fileUrl = `${endpointWithV1}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${response.$id}/view?project=${APPWRITE_PROJECT_ID}`;
 
-    // Save metadata to MongoDB
+    // Save metadata to MongoDB (resolve or create TestSeries entry and mark new media as 'published')
     try {
-      // If there's an existing media of the same type, mark it as archived
       if (testSeriesId) {
-        const existingMedia = await TestSeriesMedia.findOne({
-          testSeriesId,
-          mediaType,
-          status: 'active',
-        });
-
-        if (existingMedia) {
-          existingMedia.status = 'archived';
-          existingMedia.previousFileId = existingMedia.fileId;
-          await existingMedia.save();
+        // Resolve testSeriesId param to DB TestSeries
+        let testSeries = null;
+        if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+          testSeries = await TestSeries.findById(testSeriesId);
+        }
+        if (!testSeries) {
+          const seriesType = String(testSeriesId || '').toUpperCase();
+          if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+            testSeries = await TestSeries.findOne({ seriesType });
+            if (!testSeries) {
+              testSeries = await TestSeries.create({
+                title: `Test Series ${seriesType}`,
+                seriesType,
+                seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                category: null,
+                createdBy: req.user._id,
+                publishStatus: 'published',
+                isActive: true,
+              });
+            }
+          }
         }
 
-        // Create new media document
-        const newMedia = new TestSeriesMedia({
-          testSeriesId,
-          mediaType,
-          fileId: response.$id,
-          fileUrl,
-          fileName: originalname,
-          fileSize: size,
-          mimeType: mimetype,
-          uploadedBy: req.user._id,
-          status: 'active',
-        });
+        if (testSeries) {
+          // Normalize incoming mediaType ('image' -> 'thumbnail')
+          const normalizedMediaType = mediaType === 'image' ? 'thumbnail' : mediaType;
 
-        await newMedia.save();
+          // Archive any existing published media of the same normalized type
+          // NOTE: Some existing DBs may have an incorrect unique index on (testSeriesId, mediaType, status),
+          // which can cause a duplicate-key error when archiving. To be robust, remove any previous archived
+          // entries first so archiving the current published item does not violate such an index.
+          await TestSeriesMedia.deleteMany({ testSeriesId: testSeries._id, mediaType: normalizedMediaType, status: 'archived' });
+
+          const existingMedia = await TestSeriesMedia.findOne({
+            testSeriesId: testSeries._id,
+            mediaType: normalizedMediaType,
+            status: 'published',
+          });
+
+          if (existingMedia) {
+            existingMedia.previousFileId = existingMedia.fileId;
+            existingMedia.status = 'archived';
+            await existingMedia.save();
+          }
+
+          // Create new media document as published
+          const newMedia = new TestSeriesMedia({
+            testSeriesId: testSeries._id,
+            mediaType: normalizedMediaType,
+            fileId: response.$id,
+            fileUrl,
+            fileName: originalname,
+            fileSize: size,
+            mimeType: mimetype,
+            uploadedBy: req.user._id,
+            uploadedByRole: req.user.role || 'subadmin',
+            status: 'published',
+          });
+
+          await newMedia.save();
+          dbSaved = true;
+          console.info(`Media saved to MongoDB: mediaId=${newMedia._id}, fileId=${response.$id}, testSeriesId=${testSeries._id}, mediaType=${normalizedMediaType}`);
+        } else {
+          console.warn(`TestSeries not found or auto-creation failed for id '${testSeriesId}'. Media metadata was not saved to MongoDB.`);
+        }
       }
     } catch (dbError) {
       console.error('Error saving media metadata to MongoDB:', dbError);
       // Don't fail the upload if DB save fails, but log the error
     }
 
-    // If testSeriesId is provided, update TestSeries document
+    // If testSeriesId is provided, update TestSeries document (use resolved DB doc if exists)
     if (testSeriesId) {
       try {
-        let testSeries = await TestSeries.findById(testSeriesId);
-        if (!testSeries) {
-          // If not found, create a new TestSeries document with the provided _id
-          // This assumes testSeriesId is a valid identifier like 's1', 's2', etc.
-          testSeries = new TestSeries({
-            _id: testSeriesId,
-            title: `Test Series ${testSeriesId.toUpperCase()}`, // Default title
-            category: null, // Will need to be set later
-            createdBy: req.user._id,
-          });
+        let testSeries = null;
+        if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+          testSeries = await TestSeries.findById(testSeriesId);
         }
-
-        // Check if user has permission (creator or admin)
-        if (testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-          console.warn('User does not have permission to update test series');
-        } else {
-          if (mediaType === 'video') {
-            testSeries.videoUrl = fileUrl;
-            testSeries.videoFileId = response.$id;
-            testSeries.videoType = 'UPLOAD';
-          } else if (mediaType === 'image') {
-            testSeries.thumbnail = fileUrl;
+        if (!testSeries) {
+          const seriesType = String(testSeriesId || '').toUpperCase();
+          if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+            testSeries = await TestSeries.findOne({ seriesType });
+            if (!testSeries) {
+              testSeries = await TestSeries.create({
+                title: `Test Series ${seriesType}`,
+                seriesType,
+                seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                category: null,
+                createdBy: req.user._id,
+                publishStatus: 'published',
+                isActive: true,
+              });
+            }
           }
         }
-        await testSeries.save();
+
+        if (testSeries) {
+          // Check permission: allow update if creator or admin
+          if (testSeries.createdBy && testSeries.createdBy.toString && testSeries.createdBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+            console.warn('User does not have permission to update test series');
+          } else {
+            const normalizedMediaType = mediaType === 'image' ? 'thumbnail' : mediaType;
+            if (normalizedMediaType === 'video') {
+              testSeries.videoUrl = fileUrl;
+              testSeries.videoFileId = response.$id;
+              testSeries.videoType = 'UPLOAD';
+            } else if (normalizedMediaType === 'thumbnail') {
+              testSeries.thumbnail = fileUrl;
+            }
+            await testSeries.save();
+          }
+        } else {
+          console.warn(`TestSeries not found or auto-creation failed for id '${testSeriesId}'. TestSeries document was not updated with media info.`);
+        }
       } catch (dbError) {
         console.error('Error updating test series:', dbError);
         // Don't fail the upload if DB update fails
       }
     }
 
+    const responseMediaType = mediaType === 'image' ? 'thumbnail' : mediaType;
     return res.status(201).json({
       success: true,
-      message: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} uploaded successfully`,
-      mediaType,
+      message: `${responseMediaType.charAt(0).toUpperCase() + responseMediaType.slice(1)} uploaded successfully`,
+      mediaType: responseMediaType,
       url: fileUrl,
       fileId: response.$id,
+      dbSaved,
       file: {
         id: response.$id,
         name: response.name,
@@ -263,6 +320,13 @@ export const deleteTestSeriesMedia = async (req, res) => {
 
     // Mark media as archived in MongoDB
     try {
+      // Ensure we don't violate an existing unique index on (testSeriesId, mediaType, status)
+      // by removing any prior archived documents for the same series/type first.
+      const current = await TestSeriesMedia.findOne({ fileId });
+      if (current) {
+        await TestSeriesMedia.deleteMany({ testSeriesId: current.testSeriesId, mediaType: current.mediaType, status: 'archived' });
+      }
+
       const media = await TestSeriesMedia.findOneAndUpdate(
         { fileId },
         { status: 'archived' },
@@ -301,14 +365,26 @@ export const getTestSeriesMedia = async (req, res) => {
   try {
     const { testSeriesId, mediaType } = req.query;
 
-    const query = { status: 'active' };
+    const query = { status: 'published' };
 
     if (testSeriesId) {
-      query.testSeriesId = testSeriesId;
+      // Resolve shorthand seriesType or DB ObjectId to TestSeries _id
+      let resolved = null;
+      if (mongoose.Types.ObjectId.isValid(String(testSeriesId))) {
+        resolved = await TestSeries.findById(testSeriesId);
+      } else {
+        const seriesType = String(testSeriesId || '').toUpperCase();
+        if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+          resolved = await TestSeries.findOne({ seriesType });
+        }
+      }
+      if (resolved) query.testSeriesId = resolved._id;
+      else return res.status(200).json({ success: true, media: [] });
     }
 
     if (mediaType) {
-      query.mediaType = mediaType;
+      const normalized = String(mediaType) === 'image' ? 'thumbnail' : String(mediaType);
+      query.mediaType = normalized;
     }
 
     const media = await TestSeriesMedia.find(query)

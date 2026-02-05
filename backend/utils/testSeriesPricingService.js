@@ -71,70 +71,39 @@ export const calculatePrice = (params) => {
   let basePrice = 0;
   let appliedRule = '';
 
+  // New per-subject price mapping requested by product
+  const perSubjectTotalMap = {
+    1: 450,
+    2: 900,
+    3: 1350,
+    4: 1800,
+    5: 2250, // special cap for 5 subjects
+  };
+
   // ============================================
   // S1 – Full Syllabus (Series-wise)
   // ============================================
   if (seriesType === 'S1') {
-    // Rule 1: All 3 series + all 5 subjects → ₹6000 (OVERRIDE all)
-    if (seriesCount === 3 && subjectCount === 5) {
-      basePrice = pricing.allSeriesAllSubjectsPrice || 6000;
-      appliedRule = 'S1: All 3 series + All 5 subjects';
-    }
-    // Rule 2: Single series, all 5 subjects → ₹2000
-    else if (seriesCount >= 1 && subjectCount === 5) {
-      basePrice = (pricing.allSubjectsPrice || 2000) * seriesCount;
-      appliedRule = `S1: All 5 subjects × ${seriesCount} series`;
-    }
-    // Rule 3: Combo (≥3 subjects) → ₹400 per subject per series
-    else if (subjectCount >= 3) {
-      basePrice = 400 * subjectCount * seriesCount;
-      appliedRule = `S1: Combo (${subjectCount} subjects) × ${seriesCount} series`;
-    }
-    // Rule 4: Individual subject → ₹450 per series
-    else {
-      basePrice = (pricing.subjectPrice || 450) * subjectCount * seriesCount;
-      appliedRule = `S1: Individual subjects (${subjectCount}) × ${seriesCount} series`;
-    }
+    // Use new per-subject total mapping, multiplied by selected series count
+    const perSubjectTotal = perSubjectTotalMap[Math.min(subjectCount, 5)] || (450 * subjectCount);
+    basePrice = perSubjectTotal * Math.max(1, seriesCount);
+    appliedRule = `S1: ${subjectCount} subjects mapped total ${perSubjectTotal} × ${Math.max(1, seriesCount)} series`;
   }
   // ============================================
   // S2 – 50% Syllabus (Group-wise, NO series)
   // ============================================
   else if (seriesType === 'S2') {
-    // Rule 1: All 5 subjects (Both group) → ₹2000
-    if (subjectCount === 5) {
-      basePrice = pricing.allSubjectsPrice || 2000;
-      appliedRule = 'S2: All 5 subjects (10 papers)';
-    }
-    // Rule 2: Combo (≥3 subjects) → ₹400 per subject
-    else if (subjectCount >= 3) {
-      basePrice = 400 * subjectCount;
-      appliedRule = `S2: Combo (${subjectCount} subjects, ${subjectCount * 2} papers)`;
-    }
-    // Rule 3: Individual subject → ₹450
-    else {
-      basePrice = (pricing.subjectPrice || 450) * subjectCount;
-      appliedRule = `S2: Individual subjects (${subjectCount}, ${subjectCount * 2} papers)`;
-    }
+    // Use new per-subject total mapping (no series multiplier for S2)
+    basePrice = perSubjectTotalMap[Math.min(subjectCount, 5)] || (450 * subjectCount);
+    appliedRule = `S2: ${subjectCount} subjects mapped total ${basePrice}`;
   }
   // ============================================
   // S3 – 30% Syllabus (Group-wise, NO series)
   // ============================================
   else if (seriesType === 'S3') {
-    // Rule 1: All 5 subjects (Both group) → ₹2000
-    if (subjectCount === 5) {
-      basePrice = pricing.allSubjectsPrice || 2000;
-      appliedRule = 'S3: All 5 subjects (15 papers)';
-    }
-    // Rule 2: Combo (≥3 subjects) → ₹400 per subject
-    else if (subjectCount >= 3) {
-      basePrice = 400 * subjectCount;
-      appliedRule = `S3: Combo (${subjectCount} subjects, ${subjectCount * 3} papers)`;
-    }
-    // Rule 3: Individual subject → ₹450
-    else {
-      basePrice = (pricing.subjectPrice || 450) * subjectCount;
-      appliedRule = `S3: Individual subjects (${subjectCount}, ${subjectCount * 3} papers)`;
-    }
+    // Use new per-subject total mapping (no series multiplier for S3)
+    basePrice = perSubjectTotalMap[Math.min(subjectCount, 5)] || (450 * subjectCount);
+    appliedRule = `S3: ${subjectCount} subjects mapped total ${basePrice}`;
   }
   // ============================================
   // S4 – CA Successful Specials (Group-wise)
@@ -145,12 +114,12 @@ export const calculatePrice = (params) => {
       basePrice = 6000;
       appliedRule = 'S4: All 5 subjects (30 papers)';
     }
-    // Rule 2: Combo (≥3 subjects) → ₹3600
-    else if (subjectCount >= 3) {
+    // Rule 2: Combo (exactly 3 subjects) → ₹3600
+    else if (subjectCount === 3) {
       basePrice = 3600;
       appliedRule = `S4: Combo (${subjectCount} subjects, ${subjectCount * 6} papers)`;
     }
-    // Rule 3: Individual subject → ₹1200 (6 papers)
+    // Rule 3: Individual subjects (per-subject ₹1200)
     else {
       basePrice = (pricing.subjectPrice || 1200) * subjectCount;
       appliedRule = `S4: Individual subjects (${subjectCount}, ${subjectCount * 6} papers)`;
@@ -158,23 +127,32 @@ export const calculatePrice = (params) => {
   }
 
   // ============================================
-  // Apply coupon discount
+  // Apply coupon discount (only if total papers > 2)
   // ============================================
   let discountAmount = 0;
   let couponUsed = null;
+  const totalPapers = calculatePaperCount(seriesType, selectedSeries, selectedSubjects);
 
-  if (couponCode && coupons[couponCode]) {
+  const isEligibleForCoupon =
+    seriesType === 'S1'
+      ? totalPapers > 2
+      : seriesType === 'S2' || seriesType === 'S3'
+        ? subjectCount > 2
+        : seriesType === 'S4'
+          ? true
+          : false;
+  if (couponCode && coupons[couponCode] && isEligibleForCoupon) {
     const coupon = coupons[couponCode];
     if (coupon.type === 'flat') {
       discountAmount = Math.min(coupon.value, basePrice);
     } else if (coupon.type === 'percent') {
-      discountAmount = Math.floor((basePrice * coupon.value) / 100);
+      const percentToApply = seriesType === 'S4' ? Math.min(coupon.value, 16) : coupon.value;
+      discountAmount = Math.floor((basePrice * percentToApply) / 100);
     }
     couponUsed = couponCode;
   }
 
   const finalPrice = Math.max(0, basePrice - discountAmount);
-  const totalPapers = calculatePaperCount(seriesType, selectedSeries, selectedSubjects);
 
   return {
     basePrice,
@@ -217,19 +195,25 @@ export const getPapersPerSubject = (seriesType) => {
 export const calculatePricePerSubject = (seriesType, subjectCount) => {
   if (subjectCount <= 0) return 0;
 
+  // Use the same per-subject TOTAL mapping as calculatePrice for S1/S2/S3
+  const perSubjectTotalMap = {
+    1: 450,
+    2: 900,
+    3: 1350,
+    4: 1800,
+    5: 2250,
+  };
+
   switch (seriesType) {
     case 'S1':
-      if (subjectCount >= 5) return 2000 / 5;
-      if (subjectCount >= 3) return 400;
-      return 450;
     case 'S2':
-    case 'S3':
-      if (subjectCount >= 5) return 2000 / 5;
-      if (subjectCount >= 3) return 400;
-      return 450;
+    case 'S3': {
+      const total = perSubjectTotalMap[Math.min(subjectCount, 5)] || (450 * subjectCount);
+      return Math.floor(total / Math.max(1, subjectCount));
+    }
     case 'S4':
-      if (subjectCount >= 5) return 6000 / 5;
-      if (subjectCount >= 3) return 3600 / subjectCount;
+      if (subjectCount === 5) return 6000 / 5;
+      if (subjectCount === 3) return 3600 / 3;
       return 1200;
     default:
       return 0;
@@ -248,7 +232,7 @@ export const validateSelection = (seriesType, selectedSeries, selectedSubjects) 
 
   // S1 requires series selection
   if (seriesType === 'S1' && (!selectedSeries || selectedSeries.length === 0)) {
-    errors.push('Series selection is required for S1 Full Syllabus');
+    errors.push('Series selection is required for Full Syllabus');
   }
 
   // All types require subject selection

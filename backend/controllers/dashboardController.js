@@ -6,58 +6,149 @@ import Enrollment from '../models/Enrollment.js';
 import PublishRequest from '../models/PublishRequest.js';
 import Testimonial from '../models/Testimonial.js';
 import TestSeries from '../models/TestSeries.js';
+import mongoose from 'mongoose';
 
 // @desc    Get admin dashboard stats
 // @route   GET /api/dashboard/stats
 // @access  Private/Admin
 export const getDashboardStats = async (req, res) => {
   try {
-    // Count totals
-    const totalUsers = await User.countDocuments({ role: 'user' });
-    const totalResources = await Resource.countDocuments({ isActive: true });
-    const totalCourses = await Course.countDocuments({ isActive: true, publishStatus: 'published' });
-    const totalTestSeries = await TestSeries.countDocuments({ isActive: true, publishStatus: 'published' });
+    // Sanitize any legacy shorthand references (e.g., 's1') in PublishRequest and Resource documents so
+    // subsequent TestSeries queries do not attempt to cast shorthand strings to ObjectId and fail.
+    try {
+      console.log('[Dashboard] Scanning for shorthand contentId/testSeriesId references');
+      const prs = await PublishRequest.find({ contentType: 'testSeries' });
+      for (const pr of prs) {
+        if (typeof pr.contentId === 'string') {
+          const seriesType = String(pr.contentId || '').toUpperCase();
+          if (/^S[1-4]$/.test(seriesType)) {
+            const ts = await TestSeries.findOne({ seriesType });
+            if (ts) {
+              pr.contentId = ts._id;
+              await pr.save();
+              console.log(`[Dashboard] Migrated PublishRequest ${pr._id} contentId ${seriesType} -> ${ts._id}`);
+            } else {
+              console.warn(`[Dashboard] No TestSeries found for shorthand ${seriesType} referenced by PublishRequest ${pr._id}`);
+            }
+          }
+        }
+      }
+
+      const resources = await Resource.find({ testSeriesId: { $exists: true } });
+      for (const r of resources) {
+        if (typeof r.testSeriesId === 'string') {
+          const seriesType = String(r.testSeriesId || '').toUpperCase();
+          if (/^S[1-4]$/.test(seriesType)) {
+            const ts = await TestSeries.findOne({ seriesType });
+            if (ts) {
+              r.testSeriesId = ts._id;
+              await r.save();
+              console.log(`[Dashboard] Migrated Resource ${r._id} testSeriesId ${seriesType} -> ${ts._id}`);
+            } else {
+              console.warn(`[Dashboard] No TestSeries found for shorthand ${seriesType} referenced by Resource ${r._id}`);
+            }
+          }
+        }
+      }
+    } catch (sanErr) {
+      console.warn('[Dashboard] Sanitization of shorthand IDs failed:', sanErr.message);
+    }
+
+    // Count totals (with diagnostic logging)
+    console.log('[Dashboard] Fetching totalUsers');
+    let totalUsers;
+    try { totalUsers = await User.countDocuments({ role: 'user' }); console.log('[Dashboard] totalUsers:', totalUsers); } catch (err) { console.error('[Dashboard] Error counting users:', err); throw err; }
+
+    console.log('[Dashboard] Fetching totalResources');
+    let totalResources;
+    try { totalResources = await Resource.countDocuments({ isActive: true }); console.log('[Dashboard] totalResources:', totalResources); } catch (err) { console.error('[Dashboard] Error counting resources:', err); throw err; }
+
+    console.log('[Dashboard] Fetching totalCourses');
+    let totalCourses;
+    try { totalCourses = await Course.countDocuments({ isActive: true, publishStatus: 'published' }); console.log('[Dashboard] totalCourses:', totalCourses); } catch (err) { console.error('[Dashboard] Error counting courses:', err); throw err; }
+
+    console.log('[Dashboard] Fetching totalTestSeries');
+    let totalTestSeries;
+    try { totalTestSeries = await TestSeries.countDocuments({ isActive: true, publishStatus: 'published' }); console.log('[Dashboard] totalTestSeries:', totalTestSeries); } catch (err) { console.error('[Dashboard] Error counting test series:', err); throw err; }
 
     // Active offers (not expired)
     const now = new Date();
-    const activeOffers = await Offer.countDocuments({
-      isActive: true,
-      startDate: { $lte: now },
-      endDate: { $gte: now },
-    });
+    console.log('[Dashboard] Fetching activeOffers');
+    let activeOffers;
+    try { activeOffers = await Offer.countDocuments({ isActive: true, startDate: { $lte: now }, endDate: { $gte: now } }); console.log('[Dashboard] activeOffers:', activeOffers); } catch (err) { console.error('[Dashboard] Error counting offers:', err); throw err; }
 
     // Pending requests (publish + testimonials + contact submissions)
-    const pendingPublishRequests = await PublishRequest.countDocuments({ status: 'pending' });
-    const pendingTestimonials = await Testimonial.countDocuments({ status: 'pending' });
+    console.log('[Dashboard] Fetching pendingPublishRequests');
+    let pendingPublishRequests;
+    try { pendingPublishRequests = await PublishRequest.countDocuments({ status: 'pending' }); console.log('[Dashboard] pendingPublishRequests:', pendingPublishRequests); } catch (err) { console.error('[Dashboard] Error counting publish requests:', err); throw err; }
+
+    console.log('[Dashboard] Fetching pendingTestimonials');
+    let pendingTestimonials;
+    try { pendingTestimonials = await Testimonial.countDocuments({ status: 'pending' }); console.log('[Dashboard] pendingTestimonials:', pendingTestimonials); } catch (err) { console.error('[Dashboard] Error counting testimonials:', err); throw err; }
 
     // Total enrolled users (unique users with paid enrollments)
-    const totalEnrolledUsers = await Enrollment.distinct('userId', { paymentStatus: 'paid' }).then(users => users.length);
+    console.log('[Dashboard] Fetching totalEnrolledUsers');
+    let totalEnrolledUsers;
+    try { totalEnrolledUsers = await Enrollment.distinct('userId', { paymentStatus: 'paid' }).then(users => users.length); console.log('[Dashboard] totalEnrolledUsers:', totalEnrolledUsers); } catch (err) { console.error('[Dashboard] Error fetching distinct enrolled users:', err); throw err; }
 
     // Total revenue (sum of amounts from paid enrollments)
-    const revenueResult = await Enrollment.aggregate([
-      { $match: { paymentStatus: 'paid' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
-    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+    console.log('[Dashboard] Calculating totalRevenue');
+    let totalRevenue;
+    try {
+      const revenueResult = await Enrollment.aggregate([
+        { $match: { paymentStatus: 'paid' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+      console.log('[Dashboard] totalRevenue:', totalRevenue);
+    } catch (err) { console.error('[Dashboard] Error calculating revenue:', err); throw err; }
 
     // Recent enrollments (last 10 days)
     const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
-    const recentEnrollments = await Enrollment.find({
-      enrollmentDate: { $gte: tenDaysAgo },
-      paymentStatus: 'paid',
-    })
-      .populate('userId', 'name')
-      .populate('courseId', 'title')
-      .populate('testSeriesId', 'title')
-      .populate('bookId', 'title')
-      .sort({ enrollmentDate: -1 })
-      .limit(10);
+    console.log('[Dashboard] Fetching recentEnrollments');
+    let recentEnrollments;
+    try {
+      recentEnrollments = await Enrollment.find({
+        enrollmentDate: { $gte: tenDaysAgo },
+        paymentStatus: 'paid',
+      })
+        .populate('userId', 'name')
+        .populate('courseId', 'title')
+        // NOTE: don't use default populate for testSeriesId because some enrollments
+        // may store a shorthand string like 's1' which would cause Mongoose to
+        // attempt to cast 's1' to ObjectId and throw. We'll manually populate below.
+        .populate('bookId', 'title')
+        .sort({ enrollmentDate: -1 })
+        .limit(10);
+      console.log('[Dashboard] recentEnrollments count:', recentEnrollments.length);
+    } catch (err) { console.error('[Dashboard] Error fetching recent enrollments:', err); throw err; }
 
     // Pending actions
     const pendingActions = [
       { label: `${pendingPublishRequests} publish requests awaiting approval`, count: pendingPublishRequests },
       { label: `${pendingTestimonials} testimonials pending review`, count: pendingTestimonials },
     ];
+
+    // Manually populate testSeriesId where required to avoid ObjectId cast errors
+    for (let i = 0; i < recentEnrollments.length; i++) {
+      const e = recentEnrollments[i];
+      if (e.testSeriesId) {
+        try {
+          if (mongoose.Types.ObjectId.isValid(String(e.testSeriesId))) {
+            const ts = await TestSeries.findById(e.testSeriesId).select('title');
+            if (ts) e.testSeriesId = ts;
+          } else {
+            const seriesType = String(e.testSeriesId || '').toUpperCase();
+            if (['S1','S2','S3','S4'].includes(seriesType)) {
+              const ts = await TestSeries.findOne({ seriesType }).select('title');
+              if (ts) e.testSeriesId = ts;
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to populate testSeriesId for recent enrollment', e._id, err.message);
+        }
+      }
+    }
 
     res.json({
       stats: {
@@ -142,7 +233,16 @@ export const getPendingPublishRequests = async (req, res) => {
           contentTitle = course?.title || 'Unknown';
           contentType = 'Course';
         } else if (r.contentType === 'testSeries') {
-          const testSeries = await TestSeries.findById(r.contentId).select('title');
+          // contentId may be an ObjectId _id OR a shorthand seriesType like 's1'. Handle both.
+          let testSeries = null;
+          if (mongoose.Types.ObjectId.isValid(String(r.contentId))) {
+            testSeries = await TestSeries.findById(r.contentId).select('title');
+          } else {
+            const seriesType = String(r.contentId || '').toUpperCase();
+            if (['S1','S2','S3','S4'].includes(seriesType)) {
+              testSeries = await TestSeries.findOne({ seriesType }).select('title');
+            }
+          }
           contentTitle = testSeries?.title || 'Unknown';
           contentType = 'Test Series';
         } else if (r.contentType === 'resource') {

@@ -10,7 +10,7 @@ import { enrollmentsAPI, usersAPI, authAPI } from "@/lib/api";
 import { getFixedSeriesById } from "@/data/fixedTestSeries";
 
 const menuItems = [
-  { id: "courses", label: "My Courses", icon: BookOpen },
+  { id: "courses", label: "Mentorship", icon: BookOpen },
   { id: "test-series", label: "My Test Series", icon: FileText },
   { id: "books", label: "My Books", icon: BookOpen },
   { id: "settings", label: "Settings", icon: Settings },

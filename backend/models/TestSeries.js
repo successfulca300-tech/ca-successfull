@@ -21,10 +21,11 @@ const testSeriesSchema = new mongoose.Schema(
       enum: ['Full Syllabus', '50% Syllabus', '30% Syllabus', 'CA Successful Specials'],
       required: true,
     },
+    // Category is optional for auto-created shorthand series (S1..S4)
     category: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Category',
-      required: [true, 'Please provide a category'],
+      required: false,
     },
     instructor: {
       type: String,
@@ -38,6 +39,23 @@ const testSeriesSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // Optional listing overrides from subadmin
+    cardTitle: { type: String, trim: true },
+    cardDescription: { type: String, trim: true },
+    // Full overview/marketing text shown on detail page (editable by subadmin)
+    overview: { type: String, trim: true },
+    // Subject-wise schedule (S1): [{ subject, series1Date, series2Date, series3Date }]
+    subjectDateSchedule: [
+      {
+        subject: String,
+        series1Date: String,
+        series2Date: String,
+        series3Date: String,
+      },
+    ],
+    // Short disclaimer or instructions provided by subadmin
+    disclaimer: { type: String, trim: true },
+
     // Pricing configuration for S1 (series-wise)
     pricing: {
       subjectPrice: {
@@ -80,6 +98,8 @@ const testSeriesSchema = new mongoose.Schema(
       series3UploadDate: String,
       group1SubmissionDate: String,
       group2SubmissionDate: String,
+      // New explicit submission deadline for S1
+      submissionDeadline: String,
     },
     // Test schedule recommendation
     testSchedule: [

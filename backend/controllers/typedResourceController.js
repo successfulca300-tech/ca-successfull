@@ -75,6 +75,9 @@ export const createTypedResource = async (req, res) => {
       }
     }
 
+    // Normalize price (treat missing/NaN as 0)
+    const priceNum = Number(price) || 0;
+
     let fileUrl = null;
     let fileId = null;
     let fileName = null;
@@ -242,7 +245,9 @@ export const createTypedResource = async (req, res) => {
           resourceType: 'notes',
           tags: parsedTags,
           createdBy: req.user._id,
-          publishStatus: 'draft',
+          // Auto-publish if this is a free (price 0) upload
+          publishStatus: priceNum === 0 ? 'published' : 'draft',
+          isPublished: priceNum === 0 ? true : false,
         };
 
         const freeResource = await FreeResource.create(freeResourceData);
@@ -260,11 +265,13 @@ export const createTypedResource = async (req, res) => {
       type: resourceCategory === 'video' ? 'video' : 'document',
       fileUrl,
       fileName,
-      price: Number(price) || 0,
+      price: priceNum,
       thumbnail: thumbnailUrl || '',
       tags: parsedTags,
       createdBy: req.user._id,
-      status: 'draft',
+      // If author is admin OR this is a free notes upload, publish immediately and make public
+      status: (req.user.role === 'admin' || (resourceCategory === 'notes' && priceNum === 0)) ? 'published' : 'draft',
+      isPublic: resourceCategory === 'notes' && priceNum === 0 ? true : undefined,
     };
 
     // Map resourceCategory to specific ID
@@ -731,18 +738,66 @@ export const getPublishedResourcesByType = async (req, res) => {
         }
       }
 
-      // First get all resources matching the query (without pagination)
-      const allResources = await FreeResource.find(query)
+      // First get all free resources (FreeResource collection)
+      const allFreeResources = await FreeResource.find(query)
         .populate('createdBy', 'name email role')
         .populate('category', 'name')
         .sort({ createdAt: -1 });
 
-      // Filter to only include resources uploaded by sub-admin
-      const filteredResources = allResources.filter(resource => resource.createdBy?.role === 'subadmin');
+      // Also include note-type entries that are stored in the Resource collection and are published & public
+      const resourceQuery = {
+        resourceCategory: 'notes',
+        status: 'published',
+        isActive: true,
+        isPublic: true,
+        $or: [
+          { price: 0 },
+          { freeResourceId: { $exists: true, $ne: null } }
+        ]
+      };
 
-      // Apply pagination to filtered results
-      total = filteredResources.length;
-      resources = filteredResources.slice(skip, skip + limit);
+      const resourceNotes = await Resource.find(resourceQuery)
+        .populate('createdBy', 'name email role')
+        .populate('freeResourceId')
+        .populate('category', 'name')
+        .sort({ createdAt: -1 });
+
+      // Map FreeResource docs to objects
+      const freeList = allFreeResources.map(fr => fr.toObject());
+
+      // Map Resource docs (that are not duplicates of FreeResource entries) into compatible objects
+      const fromResourceList = resourceNotes
+        .map((r) => {
+          // If linked FreeResource exists and is already included above, skip (we will dedupe)
+          if (r.freeResourceId && r.freeResourceId._id) return null;
+
+          const obj = r.toObject();
+          // Normalize shape similar to FreeResource
+          return {
+            ...obj,
+            _id: obj._id,
+            title: obj.title || obj.fileName || obj.fileUrl,
+            description: obj.description || '',
+            thumbnail: obj.thumbnail || '',
+            fileUrl: obj.fileUrl || '',
+            fileName: obj.fileName || '',
+            resourceType: 'notes',
+          };
+        })
+        .filter(Boolean);
+
+      // Combine and dedupe by _id
+      const combined = [...freeList, ...fromResourceList];
+      const seen = new Set();
+      const finalResources = combined.filter(item => {
+        const key = (item._id && item._id.toString && item._id.toString()) || JSON.stringify(item);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      total = finalResources.length;
+      resources = finalResources.slice(skip, skip + limit);
 
       // #region agent log
       const logEntry12 = {

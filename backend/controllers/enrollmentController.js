@@ -116,7 +116,26 @@ export const createEnrollment = async (req, res) => {
       resource = await Course.findById(courseId);
       resourceType = 'course';
     } else if (testSeriesId) {
-      resource = await TestSeries.findById(testSeriesId);
+      // Resolve testSeriesId that may be a shorthand like 's1' to a DB TestSeries
+      if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+        resource = await TestSeries.findById(testSeriesId);
+      } else {
+        const seriesType = String(testSeriesId || '').toUpperCase();
+        if (['S1','S2','S3','S4'].includes(seriesType)) {
+          resource = await TestSeries.findOne({ seriesType });
+          if (!resource) {
+            resource = await TestSeries.create({
+              title: `Test Series ${seriesType}`,
+              seriesType,
+              seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+              category: null,
+              createdBy: null,
+              publishStatus: 'published',
+              isActive: true,
+            });
+          }
+        }
+      }
       resourceType = 'testseries';
     } else if (bookId) {
       resource = await Book.findById(bookId);
@@ -208,7 +227,7 @@ export const createEnrollment = async (req, res) => {
     };
     if (resourceType === 'course') createObj.courseId = courseId;
     if (resourceType === 'testseries') {
-      createObj.testSeriesId = testSeriesId;
+      createObj.testSeriesId = resource._id; // store DB ObjectId reference
       if (req.body.purchasedSubjects && Array.isArray(req.body.purchasedSubjects) && req.body.purchasedSubjects.length > 0) {
         createObj.purchasedSubjects = req.body.purchasedSubjects;
       }
@@ -402,14 +421,37 @@ export const checkEnrollment = async (req, res) => {
     const query = { userId: req.user._id };
     if (courseId) query.courseId = courseId;
     if (testSeriesId) {
-      // Normalize testSeriesId for consistency with storage
-      let normalizedTestSeriesId = testSeriesId;
-      if (testSeriesId && typeof testSeriesId === 'string' && !mongoose.Types.ObjectId.isValid(testSeriesId)) {
-        // Not an ObjectId, normalize to lowercase
-        normalizedTestSeriesId = testSeriesId.toLowerCase();
-        console.log('[CheckEnrollment] Normalized testSeriesId from', testSeriesId, 'to', normalizedTestSeriesId);
+      // Resolve shorthand to DB TestSeries ObjectId *or* allow legacy shorthand string match
+      if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+        // Convert string id to ObjectId for accurate matching against stored ObjectIds
+        try {
+          // Prefer constructing with Mongoose Types
+          const oid = new mongoose.Types.ObjectId(testSeriesId);
+          query.$or = [{ testSeriesId: oid }, { testSeriesId: testSeriesId }];
+        } catch (e) {
+          try {
+            // Fallback: use underlying mongo ObjectId constructor
+            const oid = new mongoose.mongo.ObjectId(testSeriesId);
+            query.$or = [{ testSeriesId: oid }, { testSeriesId: testSeriesId }];
+          } catch (err) {
+            console.warn('[CheckEnrollment] Failed to construct ObjectId, falling back to string match for testSeriesId:', testSeriesId, err.message);
+            query.testSeriesId = testSeriesId;
+          }
+        }
+      } else {
+        const seriesType = String(testSeriesId || '').toUpperCase();
+        if (['S1','S2','S3','S4'].includes(seriesType)) {
+          const ts = await TestSeries.findOne({ seriesType });
+          const shorthandLower = seriesType.toLowerCase();
+          if (ts) {
+            // Match either the DB ObjectId (new enrollments) or legacy shorthand string (older enrollments)
+            query.$or = [{ testSeriesId: ts._id }, { testSeriesId: shorthandLower }];
+          } else {
+            // No TS record found - check for shorthand string stored directly
+            query.testSeriesId = shorthandLower;
+          }
+        }
       }
-      query.testSeriesId = normalizedTestSeriesId;
     }
     if (bookId) query.bookId = bookId;
     
@@ -420,6 +462,8 @@ export const checkEnrollment = async (req, res) => {
       .populate('courseId', 'title')
       .populate('bookId', 'title')
       .sort({ createdAt: -1 }); // Most recent first
+
+    console.log('[CheckEnrollment] Paid enrollments returned (count):', enrollments.length, 'ids:', enrollments.map(e => e._id));
 
     // If no paid enrollments, check for pending/other statuses
     let allEnrollments = enrollments;

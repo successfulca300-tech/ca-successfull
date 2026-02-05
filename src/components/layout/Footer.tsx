@@ -20,8 +20,8 @@ const Footer = () => {
     return () => { mounted = false; };
   }, []);
 
-  const contactPhone = settings.contactPhone || '+91 98765 43210';
-  const contactEmail = settings.contactEmail || 'info@casuccessful.com';
+  const contactPhone = settings.contactPhone || '+91 91096 47073';
+  const contactEmail = settings.contactEmail || 'SuccessfulCa300@gmail.com';
   const contactAddress = settings.address || '123 Education Street, Knowledge City, India - 110001';
   const siteName = settings.siteName || 'CA Successful';
 
@@ -33,13 +33,13 @@ const Footer = () => {
           <div>
             <img src={logo} alt={siteName} className="h-16 mb-4 bg-white p-2 rounded-lg" />
             <p className="text-white/80 mb-4 text-sm leading-relaxed">
-              Your trusted partner for CA, CMA & CS exam preparation with proven track record of success.
+              Focused support for CA exam preparation with structured learning and practice.
             </p>
             <div className="flex gap-3">
-              <a href="https://youtube.com/@casuccessful?si=N6WIjOIt9qb5morZ" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
+              <a href="https://youtube.com/@casuccessful?si=N6WIjOIt9qb5morZ" target="_blank" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
                 <Youtube size={18} />
               </a>
-              <a href="https://t.me/CASuccessful" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
+              <a href="https://t.me/CASuccessful"  target="_blank" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
                 <Send size={18} />
               </a>
               {/* <a href="#" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
@@ -48,7 +48,7 @@ const Footer = () => {
               <a href="#" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
                 <Linkedin size={18} />
               </a>
-              <a href="https://www.instagram.com/ca_successful" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
+              <a href="https://www.instagram.com/ca_successful" target="_blank" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-accent hover:text-white transition-all duration-300">
                 <Instagram size={18} />
               </a>
             </div>
@@ -63,7 +63,7 @@ const Footer = () => {
             <ul className="space-y-3 mt-4">
               <li>
                 <Link to="/classes" className="text-white/80 hover:text-accent hover:pl-2 transition-all duration-300 text-sm">
-                  Courses
+                  Mentorship
                 </Link>
               </li>
               <li>
@@ -71,11 +71,11 @@ const Footer = () => {
                   Test Series
                 </Link>
               </li>
-              <li>
+              {/* <li>
                 <Link to="/books" className="text-white/80 hover:text-accent hover:pl-2 transition-all duration-300 text-sm">
                   Books
                 </Link>
-              </li>
+              </li> */}
               <li>
                 <Link to="/free-resources" className="text-white/80 hover:text-accent hover:pl-2 transition-all duration-300 text-sm">
                   Free Resources
@@ -145,6 +145,7 @@ const Footer = () => {
 
         <div className="border-t border-white/20 mt-10 pt-8 text-center">
           <p className="text-white/60 text-sm">&copy; {new Date().getFullYear()} {siteName}. All rights reserved.</p>
+          {/* <p className="text-white/60 text-sm">&copy; {new Date().getFullYear()} {siteName}. All rights reserved.</p> */}
         </div>
       </div>
     </footer>

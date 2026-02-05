@@ -4,7 +4,21 @@ import TestSeries from '../models/TestSeries.js';
 import Resource from '../models/Resource.js';
 import Book from '../models/Book.js';
 import FreeResource from '../models/FreeResource.js';
+import mongoose from 'mongoose';
 import { validationResult } from 'express-validator';
+
+// Helper: resolve test series by _id or shorthand seriesType like 's1'
+const resolveTestSeries = async (identifier) => {
+  if (!identifier) return null;
+  if (mongoose.Types.ObjectId.isValid(String(identifier))) {
+    return await TestSeries.findById(identifier);
+  }
+  const seriesType = String(identifier || '').toUpperCase();
+  if (['S1','S2','S3','S4'].includes(seriesType)) {
+    return await TestSeries.findOne({ seriesType });
+  }
+  return null;
+};
 
 // @desc    Get all publish requests (admin)
 // @route   GET /api/publish-requests
@@ -31,18 +45,18 @@ export const getPublishRequests = async (req, res) => {
 
     // Populate content details based on type
     const enrichedRequests = await Promise.all(
-      requests.map(async (req) => {
-        const reqObj = req.toObject();
-        if (req.contentType === 'course') {
-          const content = await Course.findById(req.contentId).select('title description');
+      requests.map(async (r) => {
+        const reqObj = r.toObject();
+        if (r.contentType === 'course') {
+          const content = await Course.findById(r.contentId).select('title description');
           reqObj.contentTitle = content?.title || 'Unknown';
           reqObj.content = content;
-        } else if (req.contentType === 'testSeries') {
-          const content = await TestSeries.findById(req.contentId).select('title description');
+        } else if (r.contentType === 'testSeries') {
+          const content = await resolveTestSeries(r.contentId);
           reqObj.contentTitle = content?.title || 'Unknown';
           reqObj.content = content;
-        } else if (req.contentType === 'resource') {
-          const content = await Resource.findById(req.contentId).select('title description');
+        } else if (r.contentType === 'resource') {
+          const content = await Resource.findById(r.contentId).select('title description');
           reqObj.contentTitle = content?.title || 'Unknown';
           reqObj.content = content;
         }
@@ -92,7 +106,7 @@ export const getUserPublishRequests = async (req, res) => {
         if (r.contentType === 'course') {
           reqObj.content = await Course.findById(r.contentId).select('title description');
         } else if (r.contentType === 'testSeries') {
-          reqObj.content = await TestSeries.findById(r.contentId).select('title description');
+          reqObj.content = await resolveTestSeries(r.contentId);
         } else if (r.contentType === 'resource') {
           reqObj.content = await Resource.findById(r.contentId).select('title description thumbnail');
         }
@@ -151,8 +165,8 @@ export const createPublishRequest = async (req, res) => {
         return res.status(403).json({ message: 'Not authorized to request publish for this content' });
       }
     } else if (contentType === 'testSeries') {
-      content = await TestSeries.findById(contentId);
-      if (!content || content.createdBy.toString() !== req.user._id.toString()) {
+      content = await resolveTestSeries(contentId);
+      if (!content || (content.createdBy && content.createdBy.toString() !== req.user._id.toString())) {
         return res.status(403).json({ message: 'Not authorized to request publish for this content' });
       }
     } else if (contentType === 'resource') {
@@ -215,7 +229,15 @@ export const moderatePublishRequest = async (req, res) => {
       if (publishRequest.contentType === 'course') {
         await Course.findByIdAndUpdate(publishRequest.contentId, { publishStatus: 'published', isPublished: true });
       } else if (publishRequest.contentType === 'testSeries') {
-        await TestSeries.findByIdAndUpdate(publishRequest.contentId, { publishStatus: 'published' });
+        // handle shorthand 's1' etc.
+        if (mongoose.Types.ObjectId.isValid(String(publishRequest.contentId))) {
+          await TestSeries.findByIdAndUpdate(publishRequest.contentId, { publishStatus: 'published' });
+        } else {
+          const seriesType = String(publishRequest.contentId || '').toUpperCase();
+          if (['S1','S2','S3','S4'].includes(seriesType)) {
+            await TestSeries.findOneAndUpdate({ seriesType }, { publishStatus: 'published' });
+          }
+        }
       } else if (publishRequest.contentType === 'resource') {
         const resource = await Resource.findById(publishRequest.contentId);
         await Resource.findByIdAndUpdate(publishRequest.contentId, { 
@@ -247,7 +269,14 @@ export const moderatePublishRequest = async (req, res) => {
       if (publishRequest.contentType === 'course') {
         await Course.findByIdAndUpdate(publishRequest.contentId, { publishStatus: 'rejected', publishNotes: rejectionReason });
       } else if (publishRequest.contentType === 'testSeries') {
-        await TestSeries.findByIdAndUpdate(publishRequest.contentId, { publishStatus: 'rejected' });
+        if (mongoose.Types.ObjectId.isValid(String(publishRequest.contentId))) {
+          await TestSeries.findByIdAndUpdate(publishRequest.contentId, { publishStatus: 'rejected' });
+        } else {
+          const seriesType = String(publishRequest.contentId || '').toUpperCase();
+          if (['S1','S2','S3','S4'].includes(seriesType)) {
+            await TestSeries.findOneAndUpdate({ seriesType }, { publishStatus: 'rejected' });
+          }
+        }
       } else if (publishRequest.contentType === 'resource') {
         const resource = await Resource.findById(publishRequest.contentId);
         await Resource.findByIdAndUpdate(publishRequest.contentId, { 

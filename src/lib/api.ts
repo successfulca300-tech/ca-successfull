@@ -150,11 +150,11 @@ export const resourcesAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/resources${query ? `?${query}` : ''}`);
+    return apiRequest<{ resources: any[] }>(`/resources${query ? `?${query}` : ''}`);
   },
 
   getById: async (id: string) => {
-    return apiRequest(`/resources/${id}`);
+    return apiRequest<any>(`/resources/${id}`);
   },
 
   create: async (resource: {
@@ -313,7 +313,7 @@ export const resourcesAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/resources/user${query ? `?${query}` : ''}`);
+    return apiRequest<{ resources: any[] }>(`/resources/user${query ? `?${query}` : ''}`);
   },
 
   getByCourseId: async (courseId: string, params?: {
@@ -332,14 +332,14 @@ export const resourcesAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/resources${query ? `?${query}` : ''}`);
+    return apiRequest<{ resources: any[] }>(`/resources${query ? `?${query}` : ''}`);
   },
 };
 
 // Categories API
 export const categoriesAPI = {
   getAll: async () => {
-    return apiRequest('/categories');
+    return apiRequest<{ categories: any[] }>('/categories');
   },
 
   getById: async (id: string) => {
@@ -379,7 +379,7 @@ export const coursesAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/courses${query ? `?${query}` : ''}`);
+    return apiRequest<{ courses: any[] }>(`/courses${query ? `?${query}` : ''}`);
   },
 
   getById: async (id: string) => {
@@ -489,11 +489,11 @@ export const coursesAPI = {
 // Offers API
 export const offersAPI = {
   getAll: async () => {
-    return apiRequest('/offers');
+    return apiRequest<{ offers: any[] }>('/offers');
   },
 
   getAllAdmin: async () => {
-    return apiRequest('/offers/admin/all');
+    return apiRequest<{ offers: any[] }>('/offers/admin/all');
   },
 
   getById: async (id: string) => {
@@ -538,11 +538,12 @@ export const offersAPI = {
   },
 
   validateCoupon: async (couponCode: string) => {
-    return apiRequest('/offers/validate-coupon', {
+    return apiRequest<{ valid: boolean; offer?: { code: string; discountType: string; discountValue: number; title?: string } }>('/offers/validate-coupon', {
       method: 'POST',
       body: JSON.stringify({ code: couponCode }),
     });
   },
+
 };
 
 // Books API
@@ -594,7 +595,7 @@ export const testSeriesAPI = {
   },
 
   calculatePrice: async (testSeriesId: string, selectedSeries: string[], selectedSubjects: string[], couponCode?: string) => {
-    return apiRequest('/testseries/calculate-price', {
+    return apiRequest<{ success: boolean; pricing?: { basePrice: number; totalPapers: number; finalPrice: number } }>('/testseries/calculate-price', {
       method: 'POST',
       body: JSON.stringify({
         testSeriesId,
@@ -605,12 +606,26 @@ export const testSeriesAPI = {
     });
   },
 
+
   getMyTestSeries: async () => {
     return apiRequest('/testseries/subadmin/my-series');
   },
 
   getById: async (id: string) => {
     return apiRequest(`/testseries/${id}`);
+  },
+
+  // Get server-managed version for fixed series (S1..S4), if present
+  getFixedManaged: async (fixedId: string) => {
+    return apiRequest(`/testseries/fixed/${fixedId}`);
+  },
+
+  // Upsert managed data for fixed series (subadmin only)
+  upsertFixed: async (fixedId: string, payload: any) => {
+    return apiRequest(`/testseries/fixed/${fixedId}/manage`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
   },
 
   getByCategory: async (categoryId: string, params?: { page?: number; limit?: number }) => {
@@ -705,7 +720,7 @@ export const testSeriesAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/testseries/${testSeriesId}/papers/grouped${query ? `?${query}` : ''}`);
+    return apiRequest<{ success: boolean; papers?: { [subject: string]: any[] } }>(`/testseries/${testSeriesId}/papers/grouped${query ? `?${query}` : ''}`);
   },
 
   getPapersSummary: async (testSeriesId: string) => {
@@ -772,7 +787,7 @@ export const testSeriesAPI = {
       params.append('mediaType', mediaType);
     }
     const query = params.toString();
-    return apiRequest(`/test-series/media${query ? `?${query}` : ''}`);
+    return apiRequest<{ success: boolean; media: Array<{ fileUrl: string; fileId?: string; mediaType?: string; mimeType?: string; fileName?: string }> }>(`/test-series/media${query ? `?${query}` : ''}`);
   },
 };
 
@@ -945,21 +960,21 @@ export const testimonialsAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/testimonials${query ? `?${query}` : ''}`);
+    return apiRequest<{ testimonials: any[] }>(`/testimonials${query ? `?${query}` : ''}`);
   },
 
   getById: async (id: string) => {
     return apiRequest(`/testimonials/${id}`);
   },
 
-  create: async (testimonial: { rating: number; comment: string; courseId?: string; userName?: string }) => {
+  create: async (testimonial: { rating: number; comment: string; courseId?: string; courseTitle?: string; userName?: string }) => {
     return apiRequest('/testimonials', {
       method: 'POST',
       body: JSON.stringify(testimonial),
     });
   },
 
-  update: async (id: string, testimonial: { rating?: number; comment?: string; userName?: string }) => {
+  update: async (id: string, testimonial: { rating?: number; comment?: string; courseTitle?: string; userName?: string; featured?: boolean; isFeatured?: boolean }) => {
     return apiRequest(`/testimonials/${id}`, {
       method: 'PUT',
       body: JSON.stringify(testimonial),
@@ -972,7 +987,7 @@ export const testimonialsAPI = {
     });
   },
 
-  moderate: async (id: string, action: 'approve' | 'reject', rejectionReason?: string) => {
+  moderate: async (id: string, action: 'approved' | 'rejected', rejectionReason?: string) => {
     return apiRequest(`/testimonials/${id}/moderate`, {
       method: 'PUT',
       body: JSON.stringify({ action, rejectionReason }),
@@ -983,20 +998,20 @@ export const testimonialsAPI = {
 // Dashboard API (Admin only)
 export const dashboardAPI = {
   getStats: async () => {
-    return apiRequest('/dashboard/stats');
+    return apiRequest<{ stats: any }>('/dashboard/stats');
   },
 
   getRecentEnrollments: async (limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';
-    return apiRequest(`/dashboard/enrollments${query}`);
+    return apiRequest<{ enrollments: any[] }>(`/dashboard/enrollments${query}`);
   },
 
   getPendingPublishRequests: async () => {
-    return apiRequest('/dashboard/pending-requests');
+    return apiRequest<{ requests: any[] }>('/dashboard/pending-requests');
   },
 
   getPendingTestimonials: async () => {
-    return apiRequest('/dashboard/pending-testimonials');
+    return apiRequest<{ testimonials: any[] }>('/dashboard/pending-testimonials');
   },
 
   getContentOverview: async () => {
@@ -1036,7 +1051,7 @@ export const publishRequestAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/publish-requests${query ? `?${query}` : ''}`);
+    return apiRequest<{ requests: any[] }>(`/publish-requests${query ? `?${query}` : ''}`);
   },
 
   getForUser: async (params?: { page?: number; limit?: number; status?: string }) => {
@@ -1141,7 +1156,7 @@ export const usersAPI = {
       });
     }
     const query = queryParams.toString();
-    return apiRequest(`/users${query ? `?${query}` : ''}`);
+    return apiRequest<{ users: any[] }>(`/users${query ? `?${query}` : ''}`);
   },
 
   create: async (user: {
@@ -1261,7 +1276,7 @@ export const cartAPI = {
 // Settings API
 export const settingsAPI = {
   get: async () => {
-    return apiRequest('/settings');
+    return apiRequest<{ settings: any }>('/settings');
   },
   update: async (data: { siteName?: string; contactEmail?: string; contactPhone?: string; address?: string; image?: File | null }) => {
     const formData = new FormData();
