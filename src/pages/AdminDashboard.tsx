@@ -114,7 +114,7 @@ const AdminDashboard = () => {
           console.error('Categories error:', err);
           return { categories: [] };
         }),
-        resourcesAPI.getAll({ limit: 200 }).catch(err => {
+        resourcesAPI.getAllAdmin({ limit: 200 }).catch(err => {
           console.error('Resources error:', err);
           return { resources: [] };
         }),
@@ -820,7 +820,6 @@ const AdminDashboard = () => {
                       console.log('Selected filter:', resourceTypeFilter);
 
                       const filtered = resources.filter((resource) =>
-                        resource.status === 'published' &&
                         (resourceTypeFilter === "all" ||
                         (resource.resourceCategory || resource.type)?.toLowerCase().trim() === resourceTypeFilter.toLowerCase().trim())
                       );

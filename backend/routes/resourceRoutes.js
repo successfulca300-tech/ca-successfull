@@ -2,6 +2,7 @@ import express from 'express';
 import { body } from 'express-validator';
 import {
   getResources,
+  getAllResourcesAdmin,
   getResourceById,
   createResource,
   updateResource,
@@ -9,7 +10,7 @@ import {
   getResourcesByCategory,
   getUserResources,
 } from '../controllers/resourceController.js';
-import { protect, subadmin } from '../middleware/auth.js';
+import { protect, subadmin, admin } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -47,6 +48,7 @@ const updateResourceValidation = [
 // Public routes (no authentication required)
 router.get('/', getResources);
 router.get('/category/:category', getResourcesByCategory);
+router.get('/admin/all', protect, admin, getAllResourcesAdmin);
 
 // Protected routes (authentication required)
 router.get('/user', protect, getUserResources);

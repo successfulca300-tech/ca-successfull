@@ -102,3 +102,43 @@ export const getThumbnail = async (req, res) => {
     res.status(500).json({ message: 'Server error retrieving thumbnail' });
   }
 };
+
+// Public test upload endpoint: saves file locally under uploads/typed and returns accessible URL
+// Uses req.files.file from express-fileupload (not multer)
+export const testUpload = async (req, res) => {
+  try {
+    if (!req.files || !req.files.file) return res.status(400).json({ message: 'No file provided' });
+
+    let fileObj = req.files.file;
+    if (Array.isArray(fileObj)) fileObj = fileObj[0];
+
+    const originalname = fileObj.name || fileObj.originalname || fileObj.filename || 'upload';
+    const tempPath = fileObj.tempFilePath || fileObj.tempPath || fileObj.path;
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'typed');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const safeName = `${Date.now()}_${String(originalname || 'file').replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+    const destPath = path.join(uploadsDir, safeName);
+
+    // Move temp file to uploads/typed (rename will move across filesystem)
+    try {
+      fs.renameSync(tempPath, destPath);
+    } catch (e) {
+      // fallback to copy & unlink
+      const data = fs.readFileSync(tempPath);
+      fs.writeFileSync(destPath, data);
+      try { fs.unlinkSync(tempPath); } catch (er) {}
+    }
+
+    const base = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+    const fileUrl = `${base}/uploads/typed/${encodeURIComponent(safeName)}`;
+
+    return res.status(201).json({ message: 'Test upload saved', url: fileUrl, fileName: safeName });
+  } catch (error) {
+    console.error('testUpload error:', error);
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    return res.status(500).json({ message: 'Test upload failed', error: error.message });
+  }
+};

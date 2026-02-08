@@ -1,4 +1,5 @@
 import Resource from '../models/Resource.js';
+import FreeResource from '../models/FreeResource.js';
 import { validationResult } from 'express-validator';
 import { Client, Storage, InputFile } from 'node-appwrite';
 import fs from 'fs';
@@ -58,6 +59,80 @@ export const getResources = async (req, res) => {
       page,
       pages: Math.ceil(total / limit),
       total,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get all resources (admin)
+// @route   GET /api/resources/admin/all
+// @access  Private (Admin)
+export const getAllResourcesAdmin = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const { category, type, search, status, isPublic, isActive } = req.query;
+
+    const query = {};
+
+    if (category) query.category = category;
+    if (type) query.type = type;
+    if (search) query.$text = { $search: search };
+    if (status) query.status = status;
+    if (isPublic !== undefined) query.isPublic = isPublic === 'true';
+    if (isActive !== undefined) query.isActive = isActive === 'true';
+
+    const resources = await Resource.find(query)
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Resource.countDocuments(query);
+
+    // Also include free resources that may not have a Resource entry
+    const linkedFreeIds = new Set(
+      resources
+        .map((r) => (r.freeResourceId ? r.freeResourceId.toString() : null))
+        .filter(Boolean)
+    );
+
+    const freeResources = await FreeResource.find({})
+      .populate('createdBy', 'name email')
+      .populate('category', 'name')
+      .sort({ createdAt: -1 });
+
+    const freeAsResources = freeResources
+      .filter((fr) => !linkedFreeIds.has(fr._id.toString()))
+      .map((fr) => ({
+        _id: fr._id,
+        title: fr.title,
+        description: fr.description,
+        category: fr.category,
+        resourceCategory: 'notes',
+        type: 'document',
+        fileUrl: fr.fileUrl,
+        fileName: fr.fileName,
+        thumbnail: fr.thumbnail,
+        price: 0,
+        tags: fr.tags || [],
+        createdBy: fr.createdBy,
+        status: fr.publishStatus || 'draft',
+        isPublic: true,
+        isActive: fr.isActive !== false,
+        freeResourceId: fr._id,
+        createdAt: fr.createdAt,
+        updatedAt: fr.updatedAt,
+      }));
+
+    res.json({
+      resources: [...freeAsResources, ...resources],
+      page,
+      pages: Math.ceil((total + freeAsResources.length) / limit),
+      total: total + freeAsResources.length,
     });
   } catch (error) {
     console.error(error);
@@ -476,7 +551,17 @@ export const deleteResource = async (req, res) => {
     const resource = await Resource.findById(req.params.id);
 
     if (!resource) {
-      return res.status(404).json({ message: 'Resource not found' });
+      // If no Resource entry, try deleting FreeResource directly
+      const freeRes = await FreeResource.findById(req.params.id);
+      if (!freeRes) {
+        return res.status(404).json({ message: 'Resource not found' });
+      }
+
+      // Remove any linked Resource docs if they exist
+      await Resource.deleteMany({ freeResourceId: freeRes._id });
+      await freeRes.deleteOne();
+
+      return res.json({ message: 'Resource removed' });
     }
 
     // Check if user is the creator or admin
@@ -508,6 +593,15 @@ export const deleteResource = async (req, res) => {
       }
     } catch (err) {
       console.warn('Error during file removal', err);
+    }
+
+    // If this resource links to a FreeResource, delete it too
+    if (resource.freeResourceId) {
+      try {
+        await FreeResource.findByIdAndDelete(resource.freeResourceId);
+      } catch (e) {
+        console.warn('Failed to delete FreeResource:', e?.message || e);
+      }
     }
 
     await resource.deleteOne();

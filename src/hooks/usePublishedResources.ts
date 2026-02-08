@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiRequest } from '@/lib/api';
 
 interface FetchResourcesParams {
   resourceCategory: 'video' | 'book' | 'test' | 'notes';
@@ -23,7 +24,7 @@ export const usePublishedResources = (params: FetchResourcesParams) => {
       setError(null);
 
       try {
-        let url = `/api/typed-resources/published/${params.resourceCategory}`;
+        let url = `/typed-resources/published/${params.resourceCategory}`;
         const queryParams = new URLSearchParams();
 
         if (params.category) queryParams.append('category', params.category);
@@ -34,13 +35,7 @@ export const usePublishedResources = (params: FetchResourcesParams) => {
           url += `?${queryParams.toString()}`;
         }
 
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch resources');
-        }
-
-        const data = await response.json();
+        const data = await apiRequest<any>(url);
         
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/59a937cf-11a5-4e55-a51b-64b97bdf1f24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePublishedResources.ts:44',message:'Resources fetched',data:{resourceCategory:params.resourceCategory,resourcesCount:data.resources?.length||0,total:data.total,category:params.category},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});

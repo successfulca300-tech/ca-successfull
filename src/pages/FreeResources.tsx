@@ -296,10 +296,17 @@ const FreeResources = () => {
                             <span className="text-sm text-muted-foreground">by {note.createdBy?.name || 'Author'}</span>
                             <Button
                               size="sm"
-                              onClick={() => note.fileUrl && window.open(note.fileUrl, '_blank')}
+                              onClick={() => {
+                                if (!user) {
+                                  toast.error('Please login to view');
+                                  navigate('/login');
+                                  return;
+                                }
+                                if (note.fileUrl) window.open(note.fileUrl, '_blank');
+                              }}
                             >
                               <Download className="w-4 h-4 mr-2" />
-                              Download
+                              View
                             </Button>
                           </div>
                         </CardContent>

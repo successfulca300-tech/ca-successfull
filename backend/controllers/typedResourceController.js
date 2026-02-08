@@ -6,6 +6,7 @@ import FreeResource from '../models/FreeResource.js';
 import Category from '../models/Category.js';
 import { Client, Storage, InputFile } from 'node-appwrite';
 import fs from 'fs';
+import path from 'path';
 
 // Helper function to upload file to Appwrite
 const uploadToAppwrite = async (fileBuffer, fileName) => {
@@ -14,8 +15,21 @@ const uploadToAppwrite = async (fileBuffer, fileName) => {
   const APPWRITE_API_KEY = process.env.APPWRITE_API_KEY;
   const APPWRITE_BUCKET_ID = process.env.APPWRITE_BUCKET_ID;
 
+  // If Appwrite is not configured, fallback to local storage under /uploads/typed
   if (!APPWRITE_ENDPOINT || !APPWRITE_PROJECT_ID || !APPWRITE_API_KEY || !APPWRITE_BUCKET_ID) {
-    throw new Error('Appwrite configuration missing');
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'typed');
+    try {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+      const safeName = `${Date.now()}_${String(fileName || 'file').replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+      const filePath = path.join(uploadsDir, safeName);
+      fs.writeFileSync(filePath, fileBuffer);
+
+      const base = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+      const fileUrl = `${base}/uploads/typed/${encodeURIComponent(safeName)}`;
+      return { fileUrl, fileId: safeName };
+    } catch (err) {
+      throw new Error(`Local fallback save failed: ${err.message}`);
+    }
   }
 
   const client = new Client();
@@ -111,8 +125,24 @@ export const createTypedResource = async (req, res) => {
           fileId = uploadResult.fileId;
           fileName = originalName;
         } catch (uploadError) {
-          if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-          return res.status(500).json({ message: `File upload failed: ${uploadError.message}` });
+          console.error('uploadToAppwrite failed, attempting local save fallback:', uploadError);
+          // Try local fallback directly
+          try {
+            const uploadsDir = path.join(process.cwd(), 'uploads', 'typed');
+            fs.mkdirSync(uploadsDir, { recursive: true });
+            const safeName = `${Date.now()}_${String(originalName || 'file').replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+            const filePath = path.join(uploadsDir, safeName);
+            fs.writeFileSync(filePath, fileBuffer);
+            const base = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+            fileUrl = `${base}/uploads/typed/${encodeURIComponent(safeName)}`;
+            fileId = safeName;
+            fileName = originalName;
+            console.warn('Local fallback save succeeded for uploaded file', { filePath, fileUrl });
+          } catch (fallbackErr) {
+            if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            console.error('Local fallback also failed:', fallbackErr);
+            return res.status(500).json({ message: `File upload failed: ${uploadError.message}` });
+          }
         }
       }
 
@@ -459,6 +489,7 @@ export const getPendingResources = async (req, res) => {
 
     const total = await Resource.countDocuments(query);
 
+    console.log(`[getPublishedResourcesByType] origin=${req.headers.origin || req.ip} category=${resourceCategory} categoryFilter=${category || 'none'} returned=${resources.length} total=${total}`);
     res.json({
       resources,
       page,
@@ -476,21 +507,6 @@ export const getPendingResources = async (req, res) => {
 // @access  Public
 export const getPublishedResourcesByType = async (req, res) => {
   try {
-    // #region agent log
-    const logPath = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-    const logEntry = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-      location: 'typedResourceController.js:456',
-      message: 'getPublishedResourcesByType entry',
-      data: { resourceCategory: req.params.resourceCategory, category: req.query.category, page: req.query.page },
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'A'
-    };
-    fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
-    // #endregion
-
     const { resourceCategory } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -504,32 +520,14 @@ export const getPublishedResourcesByType = async (req, res) => {
     let resources = [];
     let total = 0;
 
-    // For books, test series, and notes, query directly from their collections
     if (resourceCategory === 'book') {
-      // #region agent log
-      const logPathBook = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-      const logEntry2 = {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        location: 'typedResourceController.js:472',
-        message: 'Processing book resourceCategory',
-        data: { resourceCategory, category },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'B'
-      };
-      fs.appendFileSync(logPathBook, JSON.stringify(logEntry2) + '\n');
-      // #endregion
-
       const query = {
         publishStatus: 'published',
         isPublished: true,
         isActive: true,
       };
 
-      // Handle category filter - can be category name or ID
       if (category && category !== 'All') {
-        // Try to find category by name first, then by ID
         const foundCategory = await Category.findOne({
           $or: [
             { name: category },
@@ -540,21 +538,6 @@ export const getPublishedResourcesByType = async (req, res) => {
         if (foundCategory) {
           query.category = foundCategory._id;
         } else {
-          // #region agent log
-          const logPath2 = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-          const logEntry3 = {
-            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            timestamp: Date.now(),
-            location: 'typedResourceController.js:499',
-            message: 'Category not found for books',
-            data: { category },
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'D'
-          };
-          fs.appendFileSync(logPath2, JSON.stringify(logEntry3) + '\n');
-          // #endregion
-          // If category not found, return empty results
           return res.json({
             resources: [],
             page,
@@ -572,48 +555,15 @@ export const getPublishedResourcesByType = async (req, res) => {
         .limit(limit);
 
       total = await Book.countDocuments(query);
-
-      // #region agent log
-      const logEntry4 = {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        location: 'typedResourceController.js:512',
-        message: 'Books query result',
-        data: { bookCount: resources.length, total, query },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'B'
-      };
-      fs.appendFileSync(logPathBook, JSON.stringify(logEntry4) + '\n');
-      // #endregion
-
-      // Convert to array of objects
       resources = resources.map(book => book.toObject());
 
     } else if (resourceCategory === 'test') {
-      // #region agent log
-      const logPath3 = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-      const logEntry5 = {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        location: 'typedResourceController.js:514',
-        message: 'Processing test resourceCategory',
-        data: { resourceCategory, category },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'C'
-      };
-      fs.appendFileSync(logPath3, JSON.stringify(logEntry5) + '\n');
-      // #endregion
-
       const query = {
         publishStatus: 'published',
         isActive: true,
       };
 
-      // Handle category filter - can be category name or ID
       if (category && category !== 'All') {
-        // Try to find category by name first, then by ID
         const foundCategory = await Category.findOne({
           $or: [
             { name: category },
@@ -624,21 +574,6 @@ export const getPublishedResourcesByType = async (req, res) => {
         if (foundCategory) {
           query.category = foundCategory._id;
         } else {
-          // #region agent log
-          const logPath4 = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-          const logEntry6 = {
-            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            timestamp: Date.now(),
-            location: 'typedResourceController.js:540',
-            message: 'Category not found for tests',
-            data: { category },
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'D'
-          };
-          fs.appendFileSync(logPath4, JSON.stringify(logEntry6) + '\n');
-          // #endregion
-          // If category not found, return empty results
           return res.json({
             resources: [],
             page,
@@ -656,22 +591,6 @@ export const getPublishedResourcesByType = async (req, res) => {
         .limit(limit);
 
       total = await TestSeries.countDocuments(query);
-
-      // #region agent log
-      const logEntry7 = {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        location: 'typedResourceController.js:550',
-        message: 'TestSeries query result',
-        data: { testCount: resources.length, total, query },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'C'
-      };
-      fs.appendFileSync(logPath3, JSON.stringify(logEntry7) + '\n');
-      // #endregion
-
-      // Convert to array of objects and add duration from tests array
       resources = resources.map(testSeries => {
         const testObj = testSeries.toObject();
         testObj.duration = testSeries.tests?.[0]?.duration || 60;
@@ -679,31 +598,16 @@ export const getPublishedResourcesByType = async (req, res) => {
       });
 
     } else if (resourceCategory === 'notes') {
-      // #region agent log
-      const logPath4 = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-      const logEntry10 = {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        location: 'typedResourceController.js:552',
-        message: 'Processing notes resourceCategory',
-        data: { resourceCategory, category },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'D'
-      };
-      fs.appendFileSync(logPath4, JSON.stringify(logEntry10) + '\n');
-      // #endregion
-
       const query = {
-        publishStatus: 'published',
-        isPublished: true,
-        isActive: true,
+        $or: [
+          { publishStatus: 'published', isPublished: true },
+          { publishStatus: 'published' },
+        ],
+        isActive: { $ne: false },
         resourceType: { $in: ['notes', 'document'] },
       };
 
-      // Handle category filter - can be category name or ID
       if (category && category !== 'All') {
-        // Try to find category by name first, then by ID
         const foundCategory = await Category.findOne({
           $or: [
             { name: category },
@@ -714,21 +618,6 @@ export const getPublishedResourcesByType = async (req, res) => {
         if (foundCategory) {
           query.category = foundCategory._id;
         } else {
-          // #region agent log
-          const logPath5 = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-          const logEntry11 = {
-            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            timestamp: Date.now(),
-            location: 'typedResourceController.js:578',
-            message: 'Category not found for notes',
-            data: { category },
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'E'
-          };
-          fs.appendFileSync(logPath5, JSON.stringify(logEntry11) + '\n');
-          // #endregion
-          // If category not found, return empty results
           return res.json({
             resources: [],
             page,
@@ -738,13 +627,13 @@ export const getPublishedResourcesByType = async (req, res) => {
         }
       }
 
-      // First get all free resources (FreeResource collection)
+      // Get free resources from FreeResource collection
       const allFreeResources = await FreeResource.find(query)
         .populate('createdBy', 'name email role')
         .populate('category', 'name')
         .sort({ createdAt: -1 });
 
-      // Also include note-type entries that are stored in the Resource collection and are published & public
+      // Also get from Resource collection
       const resourceQuery = {
         resourceCategory: 'notes',
         status: 'published',
@@ -762,17 +651,12 @@ export const getPublishedResourcesByType = async (req, res) => {
         .populate('category', 'name')
         .sort({ createdAt: -1 });
 
-      // Map FreeResource docs to objects
       const freeList = allFreeResources.map(fr => fr.toObject());
 
-      // Map Resource docs (that are not duplicates of FreeResource entries) into compatible objects
       const fromResourceList = resourceNotes
         .map((r) => {
-          // If linked FreeResource exists and is already included above, skip (we will dedupe)
           if (r.freeResourceId && r.freeResourceId._id) return null;
-
           const obj = r.toObject();
-          // Normalize shape similar to FreeResource
           return {
             ...obj,
             _id: obj._id,
@@ -786,7 +670,6 @@ export const getPublishedResourcesByType = async (req, res) => {
         })
         .filter(Boolean);
 
-      // Combine and dedupe by _id
       const combined = [...freeList, ...fromResourceList];
       const seen = new Set();
       const finalResources = combined.filter(item => {
@@ -798,26 +681,10 @@ export const getPublishedResourcesByType = async (req, res) => {
 
       total = finalResources.length;
       resources = finalResources.slice(skip, skip + limit);
-
-      // #region agent log
-      const logEntry12 = {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        location: 'typedResourceController.js:591',
-        message: 'FreeResource query result',
-        data: { notesCount: resources.length, total, query },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'D'
-      };
-      fs.appendFileSync(logPath4, JSON.stringify(logEntry12) + '\n');
-      // #endregion
-
-      // Convert to array of objects
-      resources = resources.map(freeResource => freeResource.toObject());
+      resources = resources.map(item => (item && typeof item.toObject === 'function') ? item.toObject() : item);
 
     } else {
-      // For video and notes, use the Resource collection approach
+      // For video
       const query = {
         resourceCategory,
         status: 'published',
@@ -848,9 +715,7 @@ export const getPublishedResourcesByType = async (req, res) => {
         })
         .sort({ createdAt: -1 });
 
-      // Filter resources where the underlying content is also published
       const filteredResources = allResources.filter((resource) => {
-        // Check if underlying content is published
         let isContentPublished = false;
         
         if (resourceCategory === 'video' && resource.courseId) {
@@ -865,11 +730,9 @@ export const getPublishedResourcesByType = async (req, res) => {
           return false;
         }
 
-        // Apply category filter if provided
         if (category && category !== 'All') {
           let categoryMatch = false;
           
-          // Helper function to check category match
           const checkCategoryMatch = (cat) => {
             if (!cat) return false;
             if (typeof cat === 'object' && cat !== null) {
@@ -902,7 +765,6 @@ export const getPublishedResourcesByType = async (req, res) => {
       total = filteredResources.length;
       const paginatedResources = filteredResources.slice(skip, skip + limit);
 
-      // Merge Resource data with underlying content data
       resources = paginatedResources.map((resource) => {
         const resourceObj = resource.toObject();
         let contentData = {};
@@ -940,40 +802,6 @@ export const getPublishedResourcesByType = async (req, res) => {
       });
     }
 
-    // #region agent log
-    const logPath5 = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-    
-    // Check if courses exist and should be included
-    const publishedCoursesCount = await Course.countDocuments({ 
-      publishStatus: 'published', 
-      isPublished: true, 
-      isActive: true 
-    });
-    const coursesWithResourceCount = await Resource.countDocuments({ 
-      resourceCategory: 'video', 
-      status: 'published',
-      courseId: { $exists: true, $ne: null }
-    });
-    
-    const logEntry8 = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-      location: 'typedResourceController.js:683',
-      message: 'Final response data',
-      data: { 
-        resourceCategory, 
-        resourcesCount: resources.length, 
-        total,
-        publishedCoursesCount,
-        coursesWithResourceCount
-      },
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'A'
-    };
-    fs.appendFileSync(logPath5, JSON.stringify(logEntry8) + '\n');
-    // #endregion
-
     res.json({
       resources,
       page,
@@ -981,21 +809,7 @@ export const getPublishedResourcesByType = async (req, res) => {
       total,
     });
   } catch (error) {
-    // #region agent log
-    const logPath6 = 'c:\\Users\\sachi\\OneDrive\\Desktop\\Projects\\ca-successful\\.cursor\\debug.log';
-    const logEntry9 = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-      location: 'typedResourceController.js:692',
-      message: 'Error in getPublishedResourcesByType',
-      data: { error: error.message, stack: error.stack },
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'E'
-    };
-    fs.appendFileSync(logPath6, JSON.stringify(logEntry9) + '\n');
-    // #endregion
-    console.error(error);
+    console.error('[getPublishedResourcesByType] Error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

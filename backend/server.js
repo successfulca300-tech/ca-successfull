@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import fileUpload from 'express-fileupload';
 import os from 'os';
+import path from 'path';
 import connectDB from './config/database.js';
 
 // Routes
@@ -155,6 +156,9 @@ app.use('/api/order-requests', orderRequestRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/payments', paymentRoutes);
+
+// Serve local uploaded files when Appwrite is not configured or when fallbacks are used
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 /* ===============================
    Health Check

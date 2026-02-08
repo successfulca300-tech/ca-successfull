@@ -56,14 +56,11 @@ const Header = () => {
     const handleCartUpdate = () => {
       fetchCartCount();
     };
-    
+
     window.addEventListener('cartUpdated', handleCartUpdate);
-    
-    // Set up interval to refresh cart count every 5 seconds
-    const interval = setInterval(fetchCartCount, 5000);
-    
+
+    // Rely on event-driven updates instead of polling.
     return () => {
-      clearInterval(interval);
       window.removeEventListener('cartUpdated', handleCartUpdate);
     };
   }, [user, userRole]);

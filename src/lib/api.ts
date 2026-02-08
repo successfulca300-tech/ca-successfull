@@ -153,6 +153,28 @@ export const resourcesAPI = {
     return apiRequest<{ resources: any[] }>(`/resources${query ? `?${query}` : ''}`);
   },
 
+  getAllAdmin: async (params?: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    type?: string;
+    search?: string;
+    status?: string;
+    isPublic?: boolean;
+    isActive?: boolean;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    return apiRequest<{ resources: any[] }>(`/resources/admin/all${query ? `?${query}` : ''}`);
+  },
+
   getById: async (id: string) => {
     return apiRequest<any>(`/resources/${id}`);
   },
