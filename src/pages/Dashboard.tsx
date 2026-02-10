@@ -39,6 +39,12 @@ const Dashboard = () => {
     phone: '',
     dateOfBirth: '',
   });
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   
   // Form states for address
   const [addressData, setAddressData] = useState({
@@ -255,6 +261,42 @@ const Dashboard = () => {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!passwordData.currentPassword || !passwordData.newPassword) {
+      toast.error('Please fill all password fields');
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters');
+      return;
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error("New password and confirm password don't match");
+      return;
+    }
+
+    try {
+      setPasswordSubmitting(true);
+      const res = await usersAPI.changePassword(
+        passwordData.currentPassword,
+        passwordData.newPassword
+      );
+      toast.success((res as any).message || 'Password updated successfully');
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+    } catch (err: any) {
+      console.error('Change password error:', err);
+      toast.error(err.message || 'Failed to update password');
+    } finally {
+      setPasswordSubmitting(false);
+    }
+  };
+
 
 
   const handleUpdateAddress = async (e: React.FormEvent) => {
@@ -456,6 +498,54 @@ const Dashboard = () => {
                         </>
                       ) : (
                         "Update Profile"
+                      )}
+                    </Button>
+                  </form>
+
+                  <div className="my-8 border-t border-border" />
+
+                  <h3 className="text-lg font-semibold mb-4">Change Password</h3>
+                  <form onSubmit={handleChangePassword} className="space-y-5">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Current Password</label>
+                      <Input
+                        type="password"
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                        placeholder="Enter current password"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">New Password</label>
+                      <Input
+                        type="password"
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                        placeholder="Enter new password"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Confirm New Password</label>
+                      <Input
+                        type="password"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                        placeholder="Confirm new password"
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="btn-primary w-full"
+                      disabled={passwordSubmitting}
+                    >
+                      {passwordSubmitting ? (
+                        <>
+                          <Loader2 size={16} className="mr-2 animate-spin" />
+                          Updating...
+                        </>
+                      ) : (
+                        "Update Password"
                       )}
                     </Button>
                   </form>

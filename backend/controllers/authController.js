@@ -4,7 +4,7 @@ import { validationResult } from 'express-validator';
 import { validatePhone } from '../utils/validatePhone.js';
 import crypto from 'crypto';
 // import sendVerificationEmail from '../utils/sendVerificationEmail.js';
-import sendOTPEmail from '../utils/email.js';
+import sendOTPEmail, { sendPasswordResetOTP } from '../utils/email.js';
 
 /* =================================
    REGISTER
@@ -149,6 +149,73 @@ export const getMe = async (req, res) => {
     const user = await User.findById(req.user._id);
     res.json(user);
   } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* =================================
+   FORGOT PASSWORD (SEND OTP)
+================================= */
+export const forgotPassword = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = Date.now() + 10 * 60 * 1000;
+
+    user.resetPasswordOTP = otp;
+    user.resetPasswordOTPExpiry = otpExpiry;
+    await user.save();
+
+    await sendPasswordResetOTP(user.email, otp);
+
+    res.json({ message: 'OTP sent to email successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* =================================
+   RESET PASSWORD (VERIFY OTP)
+================================= */
+export const resetPassword = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, otp, password } = req.body;
+
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      resetPasswordOTP: otp,
+      resetPasswordOTPExpiry: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    user.password = password;
+    user.resetPasswordOTP = undefined;
+    user.resetPasswordOTPExpiry = undefined;
+    await user.save();
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };

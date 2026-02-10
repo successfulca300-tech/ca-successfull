@@ -6,6 +6,7 @@ import {
   updateUser,
   deleteUser,
   updateUserProfile,
+  changeUserPassword,
   sendPhoneOTP,
   verifyPhoneOTP,
   createUser,
@@ -26,6 +27,15 @@ const updateUserValidation = [
 
 // User profile routes (protected, available to all users)
 router.put('/profile/update', protect, updateUserProfile);
+router.put(
+  '/profile/change-password',
+  protect,
+  [
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  ],
+  changeUserPassword
+);
 router.post('/phone/send-otp', protect, sendPhoneOTP);
 router.post('/phone/verify-otp', protect, verifyPhoneOTP);
 

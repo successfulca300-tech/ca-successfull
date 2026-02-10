@@ -254,6 +254,39 @@ export const updateUserProfile = async (req, res) => {
   }
 };
 
+// @desc    Change password (for users to update their own password)
+// @route   PUT /api/users/profile/change-password
+// @access  Private
+export const changeUserPassword = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const userId = req.user._id;
+    const { currentPassword, newPassword } = req.body;
+
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // @desc    Send OTP to phone for verification
 // @route   POST /api/users/phone/send-otp
 // @access  Private
