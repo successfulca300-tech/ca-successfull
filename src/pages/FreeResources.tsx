@@ -293,7 +293,6 @@ const FreeResources = () => {
                             {note.description || 'Study notes and materials'}
                           </p>
                           <div className="flex items-center justify-between">
-                            <span className="text-sm text-muted-foreground">by {note.createdBy?.name || 'Author'}</span>
                             <Button
                               size="sm"
                               onClick={() => {
