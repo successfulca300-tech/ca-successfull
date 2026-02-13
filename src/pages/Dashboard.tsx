@@ -87,36 +87,36 @@ const Dashboard = () => {
       // Fetch complete user data including phone number
       const fetchUserData = async () => {
         try {
-          const fullUserData = await authAPI.getMe();
+          const fullUserData = await authAPI.getMe() as any;
           setUser(fullUserData);
           // Update localStorage with complete user data
           localStorage.setItem('user', JSON.stringify(fullUserData));
           setFormData({
-            name: fullUserData.name || '',
-            phone: fullUserData.phone || '',
-            dateOfBirth: fullUserData.dateOfBirth ? new Date(fullUserData.dateOfBirth).toISOString().split('T')[0] : '',
+            name: fullUserData?.name || '',
+            phone: fullUserData?.phone || '',
+            dateOfBirth: fullUserData?.dateOfBirth ? new Date(fullUserData.dateOfBirth).toISOString().split('T')[0] : '',
           });
           setAddressData({
-            street: fullUserData.address?.street || '',
-            city: fullUserData.address?.city || '',
-            state: fullUserData.address?.state || '',
-            country: fullUserData.address?.country || 'India',
-            postalCode: fullUserData.address?.postalCode || '',
+            street: fullUserData?.address?.street || '',
+            city: fullUserData?.address?.city || '',
+            state: fullUserData?.address?.state || '',
+            country: fullUserData?.address?.country || 'India',
+            postalCode: fullUserData?.address?.postalCode || '',
           });
         } catch (err) {
           console.error('Failed to fetch user data:', err);
           // Fallback to localStorage data
           setFormData({
-            name: userData.name || '',
-            phone: userData.phone || '',
-            dateOfBirth: userData.dateOfBirth ? new Date(userData.dateOfBirth).toISOString().split('T')[0] : '',
+            name: userData?.name || '',
+            phone: userData?.phone || '',
+            dateOfBirth: userData?.dateOfBirth ? new Date(userData.dateOfBirth).toISOString().split('T')[0] : '',
           });
           setAddressData({
-            street: userData.address?.street || '',
-            city: userData.address?.city || '',
-            state: userData.address?.state || '',
-            country: userData.address?.country || 'India',
-            postalCode: userData.address?.postalCode || '',
+            street: userData?.address?.street || '',
+            city: userData?.address?.city || '',
+            state: userData?.address?.state || '',
+            country: userData?.address?.country || 'India',
+            postalCode: userData?.address?.postalCode || '',
           });
         }
       };
@@ -133,8 +133,8 @@ const Dashboard = () => {
   const fetchEnrollments = async () => {
     try {
       setLoading(true);
-      const res = await enrollmentsAPI.getAll();
-      let processedEnrollments = (res.enrollments || []).map(enrollment => {
+      const res = await enrollmentsAPI.getAll() as any;
+      let processedEnrollments = (res?.enrollments || []).map(enrollment => {
         if (enrollment.testSeriesId && typeof enrollment.testSeriesId === 'string') {
           const fixedSeries = getFixedSeriesById(enrollment.testSeriesId);
           if (fixedSeries) {
@@ -206,7 +206,8 @@ const Dashboard = () => {
       const saved = localStorage.getItem('savedResources');
       if (saved) {
         const resources = JSON.parse(saved);
-        setSavedResources(resources);
+        // Resources loaded from localStorage
+        return resources;
       }
     } catch (err) {
       console.error('Error loading saved resources:', err);

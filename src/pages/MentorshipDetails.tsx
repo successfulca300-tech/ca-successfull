@@ -6,27 +6,24 @@ import { BookOpen, ArrowLeft, FileText, Calendar, CheckCircle2 } from 'lucide-re
 import { toast } from 'sonner';
 import { enrollmentsAPI } from '@/lib/api';
 
-const paperDetails: Record<string, { name: string; subject: string; series: string }> = {
-  // Series 1
-  s1_series1_fr: { name: 'FR Paper', subject: 'Financial Reporting', series: 'Series 1' },
-  s1_series1_afm: { name: 'AFM Paper', subject: 'Advanced Financial Management', series: 'Series 1' },
-  s1_series1_audit: { name: 'Audit Paper', subject: 'Auditing and Assurance', series: 'Series 1' },
-  s1_series1_dt: { name: 'DT Paper', subject: 'Direct Tax', series: 'Series 1' },
-  s1_series1_idt: { name: 'IDT Paper', subject: 'Indirect Tax', series: 'Series 1' },
+const paperDetails: Record<string, { series: string; subject: string; name: string; icon: React.ReactNode }> = {
+  s1_series1_fr: { series: 'Series 1', subject: 'Financial Reporting', name: 'FR Paper', icon: <FileText size={24} /> },
+  s1_series1_afm: { series: 'Series 1', subject: 'Advanced Financial Management', name: 'AFM Paper', icon: <FileText size={24} /> },
+  s1_series1_audit: { series: 'Series 1', subject: 'Auditing and Assurance', name: 'Audit Paper', icon: <FileText size={24} /> },
+  s1_series1_dt: { series: 'Series 1', subject: 'Direct Tax', name: 'DT Paper', icon: <FileText size={24} /> },
+  s1_series1_idt: { series: 'Series 1', subject: 'Indirect Tax', name: 'IDT Paper', icon: <FileText size={24} /> },
   
-  // Series 2
-  s1_series2_fr: { name: 'FR Paper', subject: 'Financial Reporting', series: 'Series 2' },
-  s1_series2_afm: { name: 'AFM Paper', subject: 'Advanced Financial Management', series: 'Series 2' },
-  s1_series2_audit: { name: 'Audit Paper', subject: 'Auditing and Assurance', series: 'Series 2' },
-  s1_series2_dt: { name: 'DT Paper', subject: 'Direct Tax', series: 'Series 2' },
-  s1_series2_idt: { name: 'IDT Paper', subject: 'Indirect Tax', series: 'Series 2' },
+  s1_series2_fr: { series: 'Series 2', subject: 'Financial Reporting', name: 'FR Paper', icon: <FileText size={24} /> },
+  s1_series2_afm: { series: 'Series 2', subject: 'Advanced Financial Management', name: 'AFM Paper', icon: <FileText size={24} /> },
+  s1_series2_audit: { series: 'Series 2', subject: 'Auditing and Assurance', name: 'Audit Paper', icon: <FileText size={24} /> },
+  s1_series2_dt: { series: 'Series 2', subject: 'Direct Tax', name: 'DT Paper', icon: <FileText size={24} /> },
+  s1_series2_idt: { series: 'Series 2', subject: 'Indirect Tax', name: 'IDT Paper', icon: <FileText size={24} /> },
   
-  // Series 3
-  s1_series3_fr: { name: 'FR Paper', subject: 'Financial Reporting', series: 'Series 3' },
-  s1_series3_afm: { name: 'AFM Paper', subject: 'Advanced Financial Management', series: 'Series 3' },
-  s1_series3_audit: { name: 'Audit Paper', subject: 'Auditing and Assurance', series: 'Series 3' },
-  s1_series3_dt: { name: 'DT Paper', subject: 'Direct Tax', series: 'Series 3' },
-  s1_series3_idt: { name: 'IDT Paper', subject: 'Indirect Tax', series: 'Series 3' },
+  s1_series3_fr: { series: 'Series 3', subject: 'Financial Reporting', name: 'FR Paper', icon: <FileText size={24} /> },
+  s1_series3_afm: { series: 'Series 3', subject: 'Advanced Financial Management', name: 'AFM Paper', icon: <FileText size={24} /> },
+  s1_series3_audit: { series: 'Series 3', subject: 'Auditing and Assurance', name: 'Audit Paper', icon: <FileText size={24} /> },
+  s1_series3_dt: { series: 'Series 3', subject: 'Direct Tax', name: 'DT Paper', icon: <FileText size={24} /> },
+  s1_series3_idt: { series: 'Series 3', subject: 'Indirect Tax', name: 'IDT Paper', icon: <FileText size={24} /> },
 };
 
 const mentorshipPlans: Record<string, { name: string; color: string }> = {
@@ -42,10 +39,6 @@ interface MentorshipEnrollment {
   enrollmentDate: string;
 }
 
-interface EnrollmentResponse {
-  enrollments: MentorshipEnrollment[];
-}
-
 const MentorshipDetails: React.FC = () => {
   const navigate = useNavigate();
   const { enrollmentId } = useParams();
@@ -56,8 +49,8 @@ const MentorshipDetails: React.FC = () => {
     const fetchEnrollment = async () => {
       try {
         setLoading(true);
-        const res = await enrollmentsAPI.getAll() as EnrollmentResponse;
-        const mentorshipEnrollments = res.enrollments.filter((e: any) => e.mentorshipId);
+        const res = await enrollmentsAPI.getAll() as any;
+        const mentorshipEnrollments = (res?.enrollments || []).filter((e: any) => e.mentorshipId);
         
         if (mentorshipEnrollments.length > 0) {
           // Use the most recent mentorship enrollment if enrollmentId not provided
@@ -152,37 +145,23 @@ const MentorshipDetails: React.FC = () => {
               <h3 className="text-xl font-semibold mb-6">Your Selected Papers</h3>
               
               {selectedPapers.length > 0 ? (
-                <div className="space-y-8">
-                  {[1, 2, 3].map((seriesNum) => {
-                    const seriesPapers = selectedPapers.filter(paperId => 
-                      paperDetails[paperId]?.series === `Series ${seriesNum}`
-                    );
-                    
-                    if (seriesPapers.length === 0) return null;
+                <div className="grid gap-4 md:grid-cols-2">
+                  {selectedPapers.map((paperId) => {
+                    const paper = paperDetails[paperId];
+                    if (!paper) return null;
 
                     return (
-                      <div key={`series-${seriesNum}`}>
-                        <h4 className="text-lg font-semibold text-foreground/80 mb-4">Series {seriesNum}</h4>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {seriesPapers.map((paperId) => {
-                            const paper = paperDetails[paperId];
-                            if (!paper) return null;
-
-                            return (
-                              <div
-                                key={paperId}
-                                className="flex items-start gap-4 p-4 bg-secondary/30 rounded-lg border border-border hover:border-primary/30 transition-all"
-                              >
-                                <FileText size={20} className="text-primary flex-shrink-0 mt-0.5" />
-                                <div className="flex-1">
-                                  <h5 className="font-semibold text-foreground">{paper.name}</h5>
-                                  <p className="text-sm text-muted-foreground">{paper.subject}</p>
-                                </div>
-                                <CheckCircle2 size={18} className="text-success flex-shrink-0 mt-0.5" />
-                              </div>
-                            );
-                          })}
+                      <div
+                        key={paperId}
+                        className="flex items-start gap-4 p-5 bg-secondary/30 rounded-lg border border-border hover:border-primary/30 transition-all"
+                      >
+                        <div className="p-3 bg-primary/10 rounded-lg text-primary">{paper.icon}</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-foreground">{paper.name}</h4>
+                          <p className="text-sm text-muted-foreground">{paper.subject}</p>
+                          <p className="text-xs text-muted-foreground/75 mt-1">{paper.series}</p>
                         </div>
+                        <CheckCircle2 size={20} className="text-success flex-shrink-0 mt-1" />
                       </div>
                     );
                   })}
