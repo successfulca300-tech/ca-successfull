@@ -17,13 +17,17 @@ function getRazorpayInstance() {
 // POST /api/payments/create-order
 export const createOrder = async (req, res) => {
   try {
-    const { courseId, testSeriesId, bookId, amount, purchasedSubjects } = req.body;
-    console.log('[Payment] createOrder called with:', { testSeriesId, amount, purchasedSubjects });
+    const { courseId, mentorshipId, testSeriesId, bookId, amount, purchasedSubjects, mentorshipPapers } = req.body;
+    console.log('[Payment] createOrder called with:', { mentorshipId, mentorshipPapers, testSeriesId, amount, purchasedSubjects });
     
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    if (req.user.role === 'admin' || req.user.role === 'subadmin') {
+      return res.status(403).json({ message: 'Admins and sub-admins cannot purchase' });
+    }
+
     // Determine resource type
-    const resourceType = courseId ? 'course' : testSeriesId ? 'testseries' : bookId ? 'book' : null;
-    const resourceId = courseId || testSeriesId || bookId;
+    const resourceType = courseId ? 'course' : mentorshipId ? 'mentorship' : testSeriesId ? 'testseries' : bookId ? 'book' : null;
+    const resourceId = courseId || mentorshipId || testSeriesId || bookId;
     if (!resourceType || !resourceId || amount === undefined) return res.status(400).json({ message: 'resource id and amount required' });
 
     // Validate amount
@@ -49,15 +53,45 @@ export const createOrder = async (req, res) => {
     } else if (resourceType === 'book') {
       const bk = await Book.findById(resourceId);
       if (!bk) return res.status(404).json({ message: 'Book not found' });
+    } else if (resourceType === 'mentorship') {
+      const validMentorshipPlans = new Set(['mentorship_basic_01', 'mentorship_golden_02', 'mentorship_platinum_03']);
+      if (!validMentorshipPlans.has(String(resourceId))) {
+        return res.status(400).json({ message: 'Invalid mentorship plan selected' });
+      }
     }
 
-    // Create pending enrollment - NORMALIZE testSeriesId for consistency
+    // Reuse existing enrollment if already created for this resource.
+    const enrollmentQuery = { userId: req.user._id };
+    if (resourceType === 'course') enrollmentQuery.courseId = resourceId;
+    if (resourceType === 'mentorship') enrollmentQuery.mentorshipId = String(resourceId);
+    if (resourceType === 'book') enrollmentQuery.bookId = resourceId;
+    if (resourceType === 'testseries') {
+      let normalizedTestSeriesId = resourceId;
+      if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
+        normalizedTestSeriesId = resourceId.toLowerCase();
+      }
+      enrollmentQuery.testSeriesId = normalizedTestSeriesId;
+    }
+
+    let enrollment = await Enrollment.findOne(enrollmentQuery);
+    if (enrollment && enrollment.paymentStatus === 'paid') {
+      return res.status(409).json({ message: 'You have already purchased this plan/resource.' });
+    }
+
+    // Create/update pending enrollment - NORMALIZE testSeriesId for consistency
     const createObj = {
-      userId: req.user._id,
       paymentStatus: 'pending',
       amount,
     };
     if (resourceType === 'course') createObj.courseId = resourceId;
+    if (resourceType === 'mentorship') {
+      createObj.mentorshipId = String(resourceId);
+      // Store mentorship papers if provided
+      if (mentorshipPapers && Array.isArray(mentorshipPapers) && mentorshipPapers.length > 0) {
+        createObj.mentorshipPapers = mentorshipPapers;
+        console.log('[Payment] Saving mentorshipPapers to enrollment:', mentorshipPapers);
+      }
+    }
     if (resourceType === 'testseries') {
       // Prefer storing DB ObjectId if TestSeries exists, else fall back to normalized shorthand string
       let storeTestSeriesId = resourceId;
@@ -74,11 +108,9 @@ export const createOrder = async (req, res) => {
 
       if (testSeriesRecord) {
         storeTestSeriesId = testSeriesRecord._id;
-      } else {
+      } else if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
         // Normalize to lowercase shorthand for legacy compatibility
-        if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
-          storeTestSeriesId = resourceId.toLowerCase();
-        }
+        storeTestSeriesId = resourceId.toLowerCase();
       }
 
       createObj.testSeriesId = storeTestSeriesId;
@@ -93,9 +125,19 @@ export const createOrder = async (req, res) => {
     }
     if (resourceType === 'book') createObj.bookId = resourceId;
 
-    const enrollment = await Enrollment.create(createObj);
+    if (!enrollment) {
+      enrollment = await Enrollment.create({
+        userId: req.user._id,
+        ...createObj,
+      });
+    } else {
+      Object.assign(enrollment, createObj);
+      await enrollment.save();
+    }
+
     console.log('[Payment] Enrollment created:', { 
       id: enrollment._id, 
+      mentorshipId: enrollment.mentorshipId,
       testSeriesId: enrollment.testSeriesId,
       purchasedSubjects: enrollment.purchasedSubjects,
       paymentStatus: enrollment.paymentStatus 
@@ -120,6 +162,9 @@ export const createOrder = async (req, res) => {
     return res.json({ mode: 'razorpay', keyId: process.env.RAZORPAY_KEY_ID, order, enrollmentId: enrollment._id });
   } catch (err) {
     console.error('createOrder error:', err);
+    if (err && err.code === 11000) {
+      return res.status(409).json({ message: 'You have already initiated/purchased this plan/resource.' });
+    }
     return res.status(500).json({ message: 'Unable to create order', error: err.message });
   }
 };
@@ -130,6 +175,9 @@ export const verifyPayment = async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, enrollmentId } = req.body;
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !enrollmentId) {
       return res.status(400).json({ message: 'Missing required fields' });
+    }
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ message: 'Razorpay secret is not configured' });
     }
 
     const generated_signature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
@@ -152,6 +200,11 @@ export const verifyPayment = async (req, res) => {
     enrollment.paymentStatus = 'paid';
     enrollment.paymentId = razorpay_payment_id;
     enrollment.transactionDate = new Date();
+    if (enrollment.testSeriesId && !enrollment.expiryDate) {
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 60);
+      enrollment.expiryDate = expiryDate;
+    }
     await enrollment.save();
 
     console.log('[Payment] Enrollment after payment update:', { 

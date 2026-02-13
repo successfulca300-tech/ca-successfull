@@ -17,6 +17,12 @@ const menuItems = [
   { id: "address", label: "Address", icon: MapPin },
 ];
 
+const mentorshipPlanTitles: Record<string, string> = {
+  mentorship_basic_01: "Basic Mentorship Plan",
+  mentorship_golden_02: "Golden Mentorship Plan",
+  mentorship_platinum_03: "Platinum Mentorship Plan",
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -138,9 +144,18 @@ const Dashboard = () => {
         return enrollment;
       });
 
-      // Group enrollments by testSeriesId and merge purchasedSubjects
+      // Separate enrollments: keep non-testSeries as-is, group only testSeries
+      const nonTestSeriesEnrollments: any[] = [];
       const groupedByTestSeries: { [key: string]: any } = {};
+
       processedEnrollments.forEach(enrollment => {
+        // If it's a course, mentorship, or book enrollment - keep it as-is
+        if (enrollment.courseId || enrollment.mentorshipId || enrollment.bookId) {
+          nonTestSeriesEnrollments.push(enrollment);
+          return;
+        }
+
+        // Only group test series enrollments
         const seriesId = enrollment.testSeriesId?._id || enrollment.testSeriesId?.id || enrollment.testSeriesId;
         if (seriesId) {
           if (!groupedByTestSeries[seriesId]) {
@@ -175,8 +190,8 @@ const Dashboard = () => {
         }
       });
 
-      // Convert grouped object back to array
-      processedEnrollments = Object.values(groupedByTestSeries);
+      // Combine: non-test series + grouped test series
+      processedEnrollments = [...nonTestSeriesEnrollments, ...Object.values(groupedByTestSeries)];
       setEnrolledCourses(processedEnrollments);
     } catch (err) {
       console.error('Error fetching enrollments:', err);
@@ -395,49 +410,86 @@ const Dashboard = () => {
 
             {/* Content */}
             <div className="lg:col-span-3">
-              {/* My Courses */}
+              {/* My Mentorship */}
               {activeTab === "courses" && (
                 <div className="bg-card p-8 rounded-xl shadow-sm border border-border">
-                  <h2 className="text-xl font-semibold mb-6">My Enrolled Courses</h2>
-                  {enrolledCourses.filter(e => e.courseId).length > 0 ? (
-                    <div className="space-y-4">
-                      {enrolledCourses.filter(e => e.courseId).map((enrollment) => (
-                        <div key={enrollment._id} className="flex items-center gap-4 p-4 bg-secondary/30 rounded-lg border border-border">
-                          <div className="w-24 h-16 bg-gradient-to-br from-primary to-navy rounded-lg flex items-center justify-center overflow-hidden">
-                            {enrollment.courseId?.thumbnail ? (
-                              <img src={enrollment.courseId.thumbnail} alt={enrollment.courseId.title} className="w-full h-full object-cover" />
-                            ) : (
-                              <BookOpen className="text-primary-foreground" size={24} />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold">{enrollment.courseId?.title || 'Course'}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Progress: {enrollment.progress || 0}%
-                            </p>
-                            <div className="w-full bg-secondary rounded-full h-2 mt-2">
-                              <div
-                                className="bg-accent h-2 rounded-full transition-all"
-                                style={{ width: `${enrollment.progress || 0}%` }}
-                              />
+                  <div className="mb-8">
+                    <h2 className="text-2xl font-bold mb-2">My Mentorship</h2>
+                    <p className="text-sm text-muted-foreground">Your active mentorship plans and courses</p>
+                  </div>
+
+                  {/* Mentorship Section */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-semibold mb-4">Mentorship Plans</h3>
+                    {enrolledCourses.filter(e => e.mentorshipId).length > 0 ? (
+                      <div className="space-y-3">
+                        {enrolledCourses.filter(e => e.mentorshipId).map((enrollment) => (
+                          <div key={enrollment._id} className="flex items-center justify-between p-5 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border border-primary/20 hover:border-primary/40 transition-all">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 bg-primary/20 rounded-lg">
+                                <BookOpen className="text-primary" size={24} />
+                              </div>
+                              <div>
+                                <h4 className="font-semibold text-foreground">{mentorshipPlanTitles[enrollment.mentorshipId] || "Mentorship Plan"}</h4>
+                                <p className="text-xs text-muted-foreground">
+                                  Purchased on {new Date(enrollment.enrollmentDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </p>
+                              </div>
                             </div>
+                            <Button className="btn-primary" onClick={() => navigate(`/mentorship-details/${enrollment._id}`)}>
+                              View Details
+                            </Button>
                           </div>
-                          <Button className="btn-primary" onClick={() => navigate(`/course/${enrollment.courseId?._id}/content`)}>
-                            <PlayCircle size={18} className="mr-2" /> Start Course
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Lock className="mx-auto mb-4" size={48} />
-                      <p>You haven't enrolled in any courses yet.</p>
-                      <p className="text-sm mt-2">Purchase a course to get started!</p>
-                      <Button onClick={() => navigate("/classes")} className="btn-primary mt-4">
-                        Browse Courses
-                      </Button>
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-secondary/30 rounded-lg border border-border text-center">
+                        <p className="text-muted-foreground text-sm">No mentorship plans purchased yet</p>
+                        <Button onClick={() => navigate("/mentorship")} className="btn-primary mt-4">
+                          Browse Mentorship Plans
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Courses Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Courses</h3>
+                    {enrolledCourses.filter(e => e.courseId).length > 0 ? (
+                      <div className="space-y-4">
+                        {enrolledCourses.filter(e => e.courseId).map((enrollment) => (
+                          <div key={enrollment._id} className="flex items-center gap-4 p-4 bg-secondary/30 rounded-lg border border-border hover:border-border transition-all">
+                            <div className="w-24 h-16 bg-gradient-to-br from-primary to-navy rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {enrollment.courseId?.thumbnail ? (
+                                <img src={enrollment.courseId.thumbnail} alt={enrollment.courseId.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <BookOpen className="text-primary-foreground" size={24} />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-foreground">{enrollment.courseId?.title || 'Course'}</h4>
+                              <p className="text-xs text-muted-foreground mb-2">
+                                Progress: {enrollment.progress || 0}%
+                              </p>
+                              <div className="w-full bg-secondary rounded-full h-2">
+                                <div
+                                  className="bg-accent h-2 rounded-full transition-all"
+                                  style={{ width: `${enrollment.progress || 0}%` }}
+                                />
+                              </div>
+                            </div>
+                            <Button className="btn-primary flex-shrink-0" onClick={() => navigate(`/course/${enrollment.courseId?._id}/content`)}>
+                              <PlayCircle size={18} className="mr-2" /> Continue
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-secondary/30 rounded-lg border border-border text-center">
+                        <p className="text-muted-foreground text-sm">No courses purchased yet</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

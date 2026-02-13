@@ -17,6 +17,7 @@ import CourseContent from "./pages/CourseContent";
 import TestSeriesContent from "./pages/TestSeriesContent";
 import FreeResources from "./pages/FreeResources";
 import Mentorship from "./pages/Mentorship";
+import MentorshipDetails from "./pages/MentorshipDetails";
 import ResourceDetail from "./pages/ResourceDetail";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
@@ -59,6 +60,7 @@ const App = () => (
           <Route path="/course/:id/content" element={<ProtectedRoute><CourseContent /></ProtectedRoute>} />
           <Route path="/course/:courseId/enroll" element={<ProtectedRoute><EnrollmentPayment /></ProtectedRoute>} />
           <Route path="/mentorship" element={<Mentorship />} />
+          <Route path="/mentorship-details/:enrollmentId" element={<ProtectedRoute><MentorshipDetails /></ProtectedRoute>} />
           <Route path="/resource/:resourceId" element={<ResourceDetail />} />
           <Route path="/test-series" element={<TestSeries />} />
           <Route path="/testseries/:id" element={<TestSeriesDetail />} />

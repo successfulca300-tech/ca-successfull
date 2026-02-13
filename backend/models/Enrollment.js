@@ -11,6 +11,10 @@ const enrollmentSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Course',
     },
+      mentorshipId: {
+        type: String,
+        trim: true,
+      },
       testSeriesId: {
         type: mongoose.Schema.Types.Mixed, // Allow string for fixed test series or ObjectId for DB ones
         ref: 'TestSeries',
@@ -21,6 +25,10 @@ const enrollmentSchema = new mongoose.Schema(
       },
     purchasedSubjects: {
       type: [String], // Store array of subject codes like ['FR', 'AFM']
+      default: [],
+    },
+    mentorshipPapers: {
+      type: [String], // Store array of paper IDs like ['s1_fr_p1', 's1_afm_p1']
       default: [],
     },
     paymentStatus: {
@@ -76,6 +84,10 @@ const enrollmentSchema = new mongoose.Schema(
 enrollmentSchema.index(
   { userId: 1, courseId: 1 },
   { unique: true, partialFilterExpression: { courseId: { $exists: true, $ne: null } } }
+);
+enrollmentSchema.index(
+  { userId: 1, mentorshipId: 1 },
+  { unique: true, partialFilterExpression: { mentorshipId: { $exists: true, $ne: null } } }
 );
 enrollmentSchema.index(
   { userId: 1, testSeriesId: 1 },
