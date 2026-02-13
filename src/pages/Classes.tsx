@@ -19,11 +19,7 @@ const Classes = () => {
           categoriesAPI.getAll(),
           coursesAPI.getAll({ limit: 100 }),
         ]);
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/59a937cf-11a5-4e55-a51b-64b97bdf1f24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Classes.tsx:23',message:'Courses fetched for Classes page',data:{coursesCount:coursesRes.courses?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        
+
         setCategories(categoriesRes.categories || []);
         setCourses(coursesRes.courses || []);
       } catch (err) {

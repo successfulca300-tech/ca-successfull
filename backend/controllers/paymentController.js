@@ -157,7 +157,21 @@ export const createOrder = async (req, res) => {
       notes: { enrollmentId: enrollment._id.toString(), resourceType, resourceId: resourceId.toString(), userId: req.user._id.toString() },
     };
 
-    const order = await instance.orders.create(options);
+    let order;
+    try {
+      order = await instance.orders.create(options);
+    } catch (rpErr) {
+      console.error('Razorpay order creation failed:', rpErr);
+      const statusCode = rpErr && rpErr.statusCode ? rpErr.statusCode : null;
+      const razorErrCode = rpErr && rpErr.error && rpErr.error.code ? rpErr.error.code : null;
+      const razorErrDesc = rpErr && rpErr.error && rpErr.error.description ? rpErr.error.description : null;
+
+      if (statusCode === 401 || razorErrCode === 'BAD_REQUEST_ERROR' || (razorErrDesc && razorErrDesc.toLowerCase().includes('authentication'))) {
+        return res.status(502).json({ message: 'Razorpay authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET configuration.', details: { statusCode, razorErrCode, razorErrDesc } });
+      }
+
+      return res.status(500).json({ message: 'Unable to create Razorpay order', error: rpErr && rpErr.message ? rpErr.message : String(rpErr) });
+    }
 
     return res.json({ mode: 'razorpay', keyId: process.env.RAZORPAY_KEY_ID, order, enrollmentId: enrollment._id });
   } catch (err) {
