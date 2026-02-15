@@ -386,7 +386,7 @@ const MentorshipPage: React.FC = () => {
                     {
                       feature: 'Performance Evaluation',
                       basic: 'Once within 10 days',
-                      golden: 'Regular review',
+                      golden: 'Weekly review',
                       platinum: 'Twice-weekly expert evaluation',
                     },
                     { feature: 'Progress Tracking', basic: 'Basic tracking', golden: 'Weekly tracking', platinum: 'Twice-weekly tracking' },
