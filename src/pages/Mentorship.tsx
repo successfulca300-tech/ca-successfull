@@ -118,6 +118,39 @@ const planIconMap: Record<Plan['tier'], React.ReactNode> = {
   platinum: <Gem className="text-sky-500" size={22} aria-hidden="true" />,
 };
 
+const tierStyles: Record<
+  Plan['tier'],
+  {
+    header: string;
+    ring: string;
+    badge: string;
+    button: string;
+    featureDot: string;
+  }
+> = {
+  basic: {
+    header: 'from-blue-500 via-sky-500 to-cyan-500',
+    ring: 'hover:ring-2 hover:ring-sky-300/70',
+    badge: 'bg-sky-100 text-sky-700',
+    button: 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600',
+    featureDot: 'bg-cyan-500',
+  },
+  golden: {
+    header: 'from-amber-500 via-orange-500 to-red-500',
+    ring: 'hover:ring-2 hover:ring-amber-300/70',
+    badge: 'bg-amber-100 text-amber-700',
+    button: 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600',
+    featureDot: 'bg-orange-500',
+  },
+  platinum: {
+    header: 'from-fuchsia-500 via-pink-500 to-rose-500',
+    ring: 'hover:ring-2 hover:ring-pink-300/70',
+    badge: 'bg-pink-100 text-pink-700',
+    button: 'bg-gradient-to-r from-fuchsia-600 to-pink-500 hover:from-fuchsia-700 hover:to-pink-600',
+    featureDot: 'bg-pink-500',
+  },
+};
+
 function StarBadge() {
   return (
     <div className="rounded-full bg-primary/10 p-1.5" aria-hidden="true">
@@ -226,14 +259,16 @@ const MentorshipPage: React.FC = () => {
         }
         .plan-card:hover {
           transform: translateY(-10px);
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          box-shadow: 0 28px 40px -14px rgba(15, 23, 42, 0.28);
         }
         .icon-container:hover {
           transform: scale(1.1);
         }
       `}</style>
 
-      <div className="bg-primary py-12">
+      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-500 py-16">
+        <div className="pointer-events-none absolute -left-20 top-10 h-56 w-56 rounded-full bg-white/20 blur-3xl" />
+        <div className="pointer-events-none absolute -right-24 bottom-0 h-64 w-64 rounded-full bg-amber-300/25 blur-3xl" />
         <div className="container mx-auto px-4">
           <h1 className="animate-fade-in text-center text-3xl font-bold text-primary-foreground md:text-4xl">
             CA Mentorship Program
@@ -241,10 +276,15 @@ const MentorshipPage: React.FC = () => {
           <p className="animate-fade-in mt-2 text-center text-primary-foreground/80" style={{ animationDelay: '0.2s' }}>
             Structured planning, personalized support, and continuous mentorship to help you succeed.
           </p>
+          <div className="animate-fade-in mt-6 flex flex-wrap items-center justify-center gap-3" style={{ animationDelay: '0.35s' }}>
+            <span className="rounded-full bg-white/20 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">1:1 Mentor Support</span>
+            <span className="rounded-full bg-white/20 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">Exam-focused Planning</span>
+            <span className="rounded-full bg-white/20 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">Progress Tracking</span>
+          </div>
         </div>
       </div>
 
-      <div className="bg-background">
+      <div className="bg-gradient-to-b from-cyan-50/30 via-background to-amber-50/30">
         <div className="container mx-auto px-4 py-8">
           <section className="animate-fade-in mb-12" style={{ animationDelay: '0.3s' }}>
             <p className="mx-auto max-w-4xl text-center text-muted-foreground">
@@ -259,22 +299,35 @@ const MentorshipPage: React.FC = () => {
             {plans.map((plan, index) => (
               <article
                 key={plan._id}
-                className="plan-card animate-slide-in-up group flex flex-col rounded-xl border border-border bg-card shadow-md transition-all duration-300"
+                className={`plan-card animate-slide-in-up group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-lg transition-all duration-300 ${tierStyles[plan.tier].ring}`}
                 style={{ animationDelay: `${index * 0.2 + 0.4}s` }}
               >
-                <div className="p-6">
-                  <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-foreground transition-colors group-hover:text-primary">
+                <div className={`bg-gradient-to-r p-5 ${tierStyles[plan.tier].header}`}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tierStyles[plan.tier].badge}`}>
+                      {plan.tier.toUpperCase()}
+                    </span>
+                    {plan.tier === 'golden' ? (
+                      <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-orange-600">Most Popular</span>
+                    ) : null}
+                  </div>
+                  <h2 className="flex items-center gap-2 text-2xl font-bold text-white">
                     {planIconMap[plan.tier]}
                     {plan.title}
                   </h2>
+                </div>
+                <div className="p-6">
                   <p className="mb-4 text-3xl font-bold text-primary">
                     {inrFormatter.format(plan.price)}
                     <span className="text-lg font-normal text-muted-foreground"> / Attempt</span>
                   </p>
                   <p className="mb-6 text-muted-foreground">{plan.bestFor}</p>
-                  <ul className="list-disc space-y-3 pl-5 text-foreground">
+                  <ul className="space-y-3 text-foreground">
                     {plan.features.map((feature) => (
-                      <li key={feature}>{feature}</li>
+                      <li key={feature} className="flex gap-3">
+                        <span className={`mt-2 inline-block h-2 w-2 flex-shrink-0 rounded-full ${tierStyles[plan.tier].featureDot}`} />
+                        <span>{feature}</span>
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -282,7 +335,7 @@ const MentorshipPage: React.FC = () => {
                   <Button
                     onClick={() => handleBuyNow(plan)}
                     disabled={processingPlanId === plan._id}
-                    className="btn-primary w-full py-6 text-lg transition-colors group-hover:bg-primary/90"
+                    className={`w-full py-6 text-lg text-white shadow-md ${tierStyles[plan.tier].button}`}
                   >
                     {processingPlanId === plan._id ? 'Processing...' : 'Buy Now'}
                   </Button>
@@ -295,15 +348,15 @@ const MentorshipPage: React.FC = () => {
             <h2 className="mb-6 text-center text-3xl font-bold text-foreground">How It Works</h2>
             <div className="grid gap-8 text-center md:grid-cols-3">
               <div className="flex flex-col items-center">
-                <div className="icon-container mb-4 rounded-full bg-primary/10 p-4 transition-transform duration-300">
-                  <Users className="text-primary" size={32} />
+                <div className="icon-container mb-4 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 p-4 transition-transform duration-300">
+                  <Users className="text-blue-600" size={32} />
                 </div>
                 <h3 className="mb-2 text-xl font-semibold text-foreground">1. Choose Your Plan</h3>
                 <p className="text-muted-foreground">Select the mentorship plan that best fits your learning style and goals.</p>
               </div>
               <div className="flex flex-col items-center">
-                <div className="icon-container mb-4 rounded-full bg-primary/10 p-4 transition-transform duration-300">
-                  <BookOpen className="text-primary" size={32} />
+                <div className="icon-container mb-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 p-4 transition-transform duration-300">
+                  <BookOpen className="text-orange-600" size={32} />
                 </div>
                 <h3 className="mb-2 text-xl font-semibold text-foreground">2. Start Learning</h3>
                 <p className="text-muted-foreground">
@@ -311,8 +364,8 @@ const MentorshipPage: React.FC = () => {
                 </p>
               </div>
               <div className="flex flex-col items-center">
-                <div className="icon-container mb-4 rounded-full bg-primary/10 p-4 transition-transform duration-300">
-                  <TrendingUp className="text-primary" size={32} />
+                <div className="icon-container mb-4 rounded-2xl bg-gradient-to-br from-fuchsia-500/20 to-pink-500/20 p-4 transition-transform duration-300">
+                  <TrendingUp className="text-pink-600" size={32} />
                 </div>
                 <h3 className="mb-2 text-xl font-semibold text-foreground">3. Track Your Progress</h3>
                 <p className="text-muted-foreground">
@@ -335,7 +388,7 @@ const MentorshipPage: React.FC = () => {
               ].map((item) => (
                 <div
                   key={item.text}
-                  className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 text-foreground transition-transform duration-300 hover:scale-105"
+                  className="flex items-center gap-4 rounded-xl border border-border/70 bg-card/90 p-4 text-foreground shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
                 >
                   <div className="text-primary">{item.icon}</div>
                   <span>{item.text}</span>
@@ -346,9 +399,9 @@ const MentorshipPage: React.FC = () => {
 
           <section className="animate-slide-in-up mb-12" style={{ animationDelay: '1.2s' }}>
             <h2 className="mb-6 text-center text-3xl font-bold text-foreground">Compare CA Mentorship Plans</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full rounded-xl border border-border bg-card">
-                <thead className="bg-muted/50">
+            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
+              <table className="min-w-full">
+                <thead className="bg-gradient-to-r from-slate-100 via-cyan-50 to-amber-50">
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Features / Benefits</th>
                     <th className="px-4 py-3 text-center font-semibold text-muted-foreground">Basic Plan</th>
@@ -386,7 +439,7 @@ const MentorshipPage: React.FC = () => {
                     {
                       feature: 'Performance Evaluation',
                       basic: 'Once within 10 days',
-                      golden: 'Weekly review',
+                      golden: 'weekly review',
                       platinum: 'Twice-weekly expert evaluation',
                     },
                     { feature: 'Progress Tracking', basic: 'Basic tracking', golden: 'Weekly tracking', platinum: 'Twice-weekly tracking' },
@@ -414,15 +467,15 @@ const MentorshipPage: React.FC = () => {
           <section className="animate-slide-in-up mb-12" style={{ animationDelay: '1.4s' }}>
             <h2 className="mb-6 text-center text-3xl font-bold text-foreground">Need Help Choosing the Right Plan?</h2>
             <div className="grid gap-8 text-center text-muted-foreground md:grid-cols-3">
-              <div>
+              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-5">
                 <h3 className="mb-2 text-xl font-semibold text-foreground">Basic Plan</h3>
                 <p>Choose Basic if you are self-disciplined and need structured guidance with expert support.</p>
               </div>
-              <div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5">
                 <h3 className="mb-2 text-xl font-semibold text-foreground">Golden Plan</h3>
                 <p>Choose Golden if you want personalized planning and regular mentor interaction.</p>
               </div>
-              <div>
+              <div className="rounded-xl border border-pink-200 bg-pink-50/70 p-5">
                 <h3 className="mb-2 text-xl font-semibold text-foreground">Platinum Plan</h3>
                 <p>Choose Platinum if you need intensive, continuous, and priority mentorship for maximum performance.</p>
               </div>
