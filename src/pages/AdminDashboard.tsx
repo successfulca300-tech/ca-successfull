@@ -581,7 +581,7 @@ const AdminDashboard = () => {
         Name: user.name || '',
         Email: user.email || '',
         'Phone Number': user.phone || '',
-        'Enrollment Status': user.isEnrolled ? 'Enrolled' : 'Not Enrolled in any course',
+        'Enrollment Status': user.isEnrolled ? (user.enrollmentNames || user.enrollmentName || 'Enrolled') : 'Not Enrolled',
       }));
 
       // Create worksheet
@@ -955,7 +955,7 @@ const AdminDashboard = () => {
                             <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
                               u.isEnrolled ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'
                             }`}>
-                              {u.isEnrolled ? 'Enrolled' : 'Not Enrolled in any course'}
+                              {u.isEnrolled ? (u.enrollmentNames || u.enrollmentName || 'Enrolled') : 'Not Enrolled in any course'}
                             </span>
                           </TableCell>
                         </TableRow>

@@ -1,5 +1,8 @@
 import User from '../models/User.js';
 import Enrollment from '../models/Enrollment.js';
+import Course from '../models/Course.js';
+import TestSeries from '../models/TestSeries.js';
+import Book from '../models/Book.js';
 import { validationResult } from 'express-validator';
 import { validatePhone } from '../utils/validatePhone.js';
 import { fileURLToPath } from 'url';
@@ -77,16 +80,60 @@ export const getUsers = async (req, res) => {
 
     const total = await User.countDocuments();
 
-    // Get enrollment status for each user
+    // Get all paid enrollments for each user and build readable names
     const usersWithEnrollmentStatus = await Promise.all(
       users.map(async (user) => {
-        const enrollmentCount = await Enrollment.countDocuments({
-          userId: user._id,
-          paymentStatus: 'paid'
-        });
+        const paidEnrollments = await Enrollment.find({ userId: user._id, paymentStatus: 'paid' }).sort({ enrollmentDate: -1 });
+
+        const enrollmentList = [];
+
+        for (const en of paidEnrollments) {
+          try {
+            if (en.courseId) {
+              const c = await Course.findById(en.courseId).select('title');
+              enrollmentList.push({ type: 'course', name: c ? c.title : String(en.courseId) });
+            } else if (en.bookId) {
+              const b = await Book.findById(en.bookId).select('title');
+              enrollmentList.push({ type: 'book', name: b ? b.title : String(en.bookId) });
+            } else if (en.testSeriesId) {
+              // testSeriesId may be ObjectId or shorthand string
+              let tsName = String(en.testSeriesId);
+              try {
+                if (typeof en.testSeriesId === 'object' && en.testSeriesId._id) {
+                  const ts = await TestSeries.findById(en.testSeriesId._id).select('title seriesType seriesTypeLabel');
+                  tsName = ts ? (ts.title || ts.seriesTypeLabel || ts.seriesType) : tsName;
+                } else if (typeof en.testSeriesId === 'string') {
+                  let ts = null;
+                  try { ts = await TestSeries.findById(en.testSeriesId).select('title seriesTypeLabel seriesType'); } catch(_) { ts = null; }
+                  if (!ts) {
+                    try { ts = await TestSeries.findOne({ seriesType: en.testSeriesId }).select('title seriesTypeLabel seriesType'); } catch(_) { ts = null; }
+                  }
+                  tsName = ts ? (ts.title || ts.seriesTypeLabel || ts.seriesType) : tsName;
+                }
+              } catch (e) {
+                /* fallback to string id */
+              }
+              enrollmentList.push({ type: 'testseries', name: tsName });
+            } else if (en.mentorshipId) {
+              const mentorshipPlanTitles = {
+                mentorship_basic_01: 'Basic Mentorship Plan',
+                mentorship_golden_02: 'Golden Mentorship Plan',
+                mentorship_platinum_03: 'Platinum Mentorship Plan'
+              };
+              enrollmentList.push({ type: 'mentorship', name: mentorshipPlanTitles[en.mentorshipId] || String(en.mentorshipId) });
+            }
+          } catch (err) {
+            console.warn('Error resolving enrollment name for user', user._id, err);
+          }
+        }
+
+        const enrollmentNames = enrollmentList.map(e => e.name).join(', ');
+
         return {
           ...user.toObject(),
-          isEnrolled: enrollmentCount > 0
+          isEnrolled: enrollmentList.length > 0,
+          enrollmentList,
+          enrollmentNames,
         };
       })
     );
