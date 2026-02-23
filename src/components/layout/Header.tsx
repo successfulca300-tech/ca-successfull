@@ -22,7 +22,7 @@ const Header = () => {
       href: '/test-series',
       children: [
         { title: 'CA Final', href: '/test-series' },
-        { title: 'CA Inter', href: '#', upcoming: true },
+        { title: 'CA Inter', href: '/test-series/ca-inter' },
       ],
     },
     { title: 'Free Resources', href: '/free-resources' },

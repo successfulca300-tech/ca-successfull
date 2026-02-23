@@ -42,6 +42,7 @@ import ResourcesManager from "./pages/admin/ResourcesManager";
 import AdminSettings from "./pages/admin/AdminSettings";
 import SubadminTestSeries from "./pages/SubadminTestSeries";
 import NotFound from "./pages/NotFound";
+import CaInter from "./pages/CaInter";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ const App = () => (
           <Route path="/mentorship-details/:enrollmentId" element={<ProtectedRoute><MentorshipDetails /></ProtectedRoute>} />
           <Route path="/resource/:resourceId" element={<ResourceDetail />} />
           <Route path="/test-series" element={<TestSeries />} />
+          <Route path="/test-series/ca-inter" element={<CaInter />} />
           <Route path="/testseries/:id" element={<TestSeriesDetail />} />
           <Route path="/testseries/:id/content" element={<ProtectedRoute><TestSeriesContent /></ProtectedRoute>} />
           <Route path="/books" element={<Books />} />
