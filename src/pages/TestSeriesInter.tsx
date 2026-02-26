@@ -161,7 +161,23 @@ const TestSeriesInter = () => {
 
                   <div className="p-4 space-y-3">
                     <div>
-                      <p className="text-sm text-muted-foreground">Starting from <span className="font-semibold">₹{test.pricing?.subjectPrice ?? 400}</span></p>
+                      <div className="text-sm text-muted-foreground">
+                        {(() => {
+                          const discountPercent = 20;
+                          const originalPrice = Number(test.pricing?.subjectPrice ?? 400);
+                          const discountedPrice = Math.round(originalPrice * (1 - discountPercent / 100));
+                          return (
+                            <>
+                              <span>Starting from </span>
+                              <span className="line-through text-gray-500 mr-2">{"\u20B9"}{originalPrice}</span>
+                              <span className="font-semibold text-primary mr-2">{"\u20B9"}{discountedPrice}</span>
+                              <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                                {discountPercent}% OFF   Use Code Now
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
                     </div>
 
                     <Button
@@ -189,3 +205,4 @@ const TestSeriesInter = () => {
 };
 
 export default TestSeriesInter;
+
