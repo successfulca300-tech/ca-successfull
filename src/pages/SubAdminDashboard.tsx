@@ -983,6 +983,9 @@ const SubAdminDashboard = () => {
                         <Button className="w-full justify-start" variant="secondary" onClick={() => navigate('/subadmin/test-series')}>
                           <FileText size={18} className="mr-2" /> Test Series Management
                         </Button>
+                        <Button className="w-full justify-start" variant="secondary" onClick={() => navigate('/subadmin/test-series/inter')}>
+                          <FileText size={18} className="mr-2" /> Manage CA Inter Series
+                        </Button>
                       </div>
                     </div>
                   </div>

@@ -30,6 +30,7 @@ const Header = () => {
   ];
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileExpandedItem, setMobileExpandedItem] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
   const { user, userRole, signOut } = useAuth();
@@ -292,13 +293,50 @@ const Header = () => {
             <div className="lg:hidden py-4 border-t border-border">
               {navigationItems.map((item) => (
                 <div key={item.title} className="py-2">
-                  <Link
-                    to={item.href}
-                    className="block font-medium text-foreground hover:text-primary"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    {item.title}
-                  </Link>
+                  {item.children ? (
+                    <>
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between font-medium text-foreground hover:text-primary"
+                        onClick={() =>
+                          setMobileExpandedItem((prev) => (prev === item.title ? null : item.title))
+                        }
+                      >
+                        <span>{item.title}</span>
+                        <ChevronDown
+                          size={16}
+                          className={`transition-transform ${
+                            mobileExpandedItem === item.title ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                      {mobileExpandedItem === item.title && (
+                        <div className="mt-2 ml-4 space-y-2 border-l border-border pl-3">
+                          {item.children.map((child) => (
+                            <Link
+                              key={child.title}
+                              to={child.href}
+                              className="block text-sm text-muted-foreground hover:text-primary"
+                              onClick={() => {
+                                setMobileMenuOpen(false);
+                                setMobileExpandedItem(null);
+                              }}
+                            >
+                              {child.title}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Link
+                      to={item.href}
+                      className="block font-medium text-foreground hover:text-primary"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      {item.title}
+                    </Link>
+                  )}
                 </div>
               ))}
               <div className="pt-4 border-t border-border mt-4 space-y-2">

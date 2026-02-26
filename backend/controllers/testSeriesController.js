@@ -145,6 +145,132 @@ Detailed answer keys provided
     seriesDates: {},
     papersPerSubject: {},
   },
+  // CA Inter fixed series
+  {
+    _id: 'inter-s1',
+    title: 'Full Syllabus Test Series (Inter)',
+    description: 'Full-syllabus test series for CA Inter with 2 series, 1 paper per subject in each series.',
+    seriesType: 'S1',
+    seriesTypeLabel: 'Full Syllabus',
+    price: 400,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    pricing: {
+      subjectPrice: 400,
+      comboPrice: 1200,
+      allSubjectsPrice: 2000,
+      allSeriesAllSubjectsPrice: 4000,
+      paperPrice: 400,
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 100, label: 'CAINTER2026 - ₹100 off' },
+    ],
+    highlights: [],
+    syllabusBreakdown: '',
+    seriesDates: {},
+    papersPerSubject: {
+      'Advance accounting': 1,
+      'Corporate law': 1,
+      'Taxation': 1,
+      'Costing': 1,
+      'Audit': 1,
+      'FM SM': 1,
+    },
+  },
+  {
+    _id: 'inter-s2',
+    title: '50% Syllabus Test Series (Inter)',
+    description: 'Focused 50% syllabus coverage for CA Inter. 2 papers per subject.',
+    seriesType: 'S2',
+    seriesTypeLabel: '50% Syllabus',
+    price: 400,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    pricing: {
+      subjectPrice: 400,
+      comboPrice: 1200,
+      allSubjectsPrice: 2400,
+      paperPrice: 400,
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 100, label: 'CAINTER2026 - ₹100 off' },
+    ],
+    highlights: [],
+    syllabusBreakdown: '',
+    seriesDates: {},
+    papersPerSubject: {
+      'Advance accounting': 2,
+      'Corporate law': 2,
+      'Taxation': 2,
+      'Costing': 2,
+      'Audit': 2,
+      'FM SM': 2,
+    },
+  },
+  {
+    _id: 'inter-s3',
+    title: 'Chapterwise Test Series (Inter)',
+    description: 'Chapterwise practice for CA Inter. 5 papers per subject.',
+    seriesType: 'S3',
+    seriesTypeLabel: 'Chapterwise',
+    price: 800,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    pricing: {
+      subjectPrice: 800,
+      comboPrice: 2400,
+      allSubjectsPrice: 4800,
+      paperPrice: 800,
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 100, label: 'CAINTER2026 - ₹100 off' },
+    ],
+    highlights: [],
+    syllabusBreakdown: '',
+    seriesDates: {},
+    papersPerSubject: {
+      'Advance accounting': 5,
+      'Corporate law': 5,
+      'Taxation': 5,
+      'Costing': 5,
+      'Audit': 5,
+      'FM SM': 5,
+    },
+  },
+  {
+    _id: 'inter-s4',
+    title: 'CA Successful Specials (Inter)',
+    description: 'Special curated series with 8 papers per subject for CA Inter.',
+    seriesType: 'S4',
+    seriesTypeLabel: 'CA Successful Specials',
+    price: 1600,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    pricing: {
+      subjectPrice: 1600,
+      comboPrice: 4800,
+      allSubjectsPrice: 9600,
+      paperPrice: 800,
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 200, label: 'CAINTER2026 - ₹200 off' },
+    ],
+    highlights: [],
+    syllabusBreakdown: '',
+    seriesDates: {},
+    papersPerSubject: {
+      'Advance accounting': 8,
+      'Corporate law': 8,
+      'Taxation': 8,
+      'Costing': 8,
+      'Audit': 8,
+      'FM SM': 8,
+    },
+  },
 ];
 
 function getFixedSeriesById(id) {
@@ -159,7 +285,7 @@ export const getTestSeries = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const { category, search, seriesType } = req.query;
+    const { category, search, seriesType, examLevel } = req.query;
 
     const query = { isActive: true, publishStatus: 'published' };
 
@@ -169,6 +295,10 @@ export const getTestSeries = async (req, res) => {
 
     if (seriesType) {
       query.seriesType = seriesType;
+    }
+
+    if (examLevel) {
+      query.examLevel = examLevel;
     }
 
     if (search) {
@@ -243,6 +373,10 @@ export const getTestSeriesByCategory = async (req, res) => {
 export const getMyTestSeries = async (req, res) => {
   try {
     const query = { createdBy: req.user._id };
+    // allow subadmin to filter by examLevel when managing their series
+    if (req.query && req.query.examLevel) {
+      query.examLevel = req.query.examLevel;
+    }
 
     const testSeries = await TestSeries.find(query)
       .populate('category', 'name')
@@ -271,20 +405,13 @@ export const getTestSeriesById = async (req, res) => {
         .populate('createdBy', 'name email');
     }
 
-    // If not found, try to find by seriesType
+    // If not found by ObjectId, prefer fixed shorthand IDs (e.g. 's1', 's2', 'inter-s1')
     if (!testSeries) {
-      const seriesType = id.toUpperCase();
-      testSeries = await TestSeries.findOne({ seriesType })
-        .populate('category', 'name')
-        .populate('createdBy', 'name email');
-    }
-
-    // If still not found, check fixed test series (shorthand IDs like 's1', 's2', etc.)
-    if (!testSeries) {
-      const fixedSeries = getFixedSeriesById(id.toLowerCase());
+      const lowerId = id.toLowerCase();
+      const fixedSeries = getFixedSeriesById(lowerId);
       if (fixedSeries) {
         // Get full fixed series data from FIXED_TEST_SERIES array
-        const fullFixedSeriesData = FIXED_TEST_SERIES.find(s => s._id === id.toLowerCase());
+        const fullFixedSeriesData = FIXED_TEST_SERIES.find(s => s._id === lowerId);
         if (fullFixedSeriesData) {
           // Return fixed series data with additional fields
           const fullFixedSeries = {
@@ -303,15 +430,48 @@ export const getTestSeriesById = async (req, res) => {
             publishStatus: 'published',
             // Add default values for fields that might be expected
             thumbnail: null,
+            cardThumbnail: null,
             category: null,
             createdBy: null,
             mode: fullFixedSeriesData.mode || 'Online',
             group: fullFixedSeriesData.group || 'Both',
             subjects: fullFixedSeriesData.subjects || [],
+            // Derive exam level for fixed entries from id prefix (e.g., 'inter-')
+            examLevel: lowerId.startsWith('inter-') ? 'inter' : 'final',
           };
+
+          // If a managed TestSeries exists for this fixed id (fixedKey), merge its overrides
+          try {
+            const managed = await TestSeries.findOne({ fixedKey: { $regex: `^${id}$`, $options: 'i' } });
+            if (managed) {
+              fullFixedSeries.thumbnail = managed.cardThumbnail || managed.thumbnail || fullFixedSeries.thumbnail;
+              fullFixedSeries.cardThumbnail = managed.cardThumbnail || managed.thumbnail || fullFixedSeries.cardThumbnail;
+              if (managed.cardTitle) fullFixedSeries.title = managed.cardTitle;
+              if (managed.cardDescription) fullFixedSeries.description = managed.cardDescription;
+              // allow managed pricing overrides to merge
+              if (managed.pricing && Object.keys(managed.pricing || {}).length > 0) {
+                fullFixedSeries.pricing = Object.assign({}, fullFixedSeries.pricing || {}, managed.pricing || {});
+              }
+              // If managed entry has explicit examLevel, override
+              if (managed.examLevel) {
+                fullFixedSeries.examLevel = managed.examLevel;
+              }
+            }
+          } catch (mergeErr) {
+            console.error('Error merging managed fixed series data:', mergeErr);
+          }
+
           return res.json({ success: true, testSeries: fullFixedSeries });
         }
       }
+    }
+
+    // If still not resolved, try to find by seriesType (S1..S4) in DB
+    if (!testSeries) {
+      const seriesType = id.toUpperCase();
+      testSeries = await TestSeries.findOne({ seriesType })
+        .populate('category', 'name')
+        .populate('createdBy', 'name email');
     }
 
     if (!testSeries) {
@@ -350,6 +510,7 @@ export const createTestSeries = async (req, res) => {
       description,
       category,
       seriesType,
+      examLevel,
       pricing,
       discountCodes,
       subjects,
@@ -368,11 +529,16 @@ export const createTestSeries = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid series type' });
     }
 
+    // Validate examLevel
+    const validLevels = ['inter', 'final'];
+    const normalizedExamLevel = examLevel && validLevels.includes(String(examLevel).toLowerCase()) ? String(examLevel).toLowerCase() : 'final';
+
     const testSeries = await TestSeries.create({
       title,
       description,
       category,
       seriesType,
+      examLevel: normalizedExamLevel,
       pricing: pricing || {},
       discountCodes: discountCodes || [],
       subjects: subjects || ['FR', 'AFM', 'Audit', 'DT', 'IDT'],
@@ -423,6 +589,7 @@ export const updateTestSeries = async (req, res) => {
       description,
       category,
       seriesType,
+      examLevel,
       pricing,
       discountCodes,
       subjects,
@@ -440,6 +607,10 @@ export const updateTestSeries = async (req, res) => {
     if (description) testSeries.description = description;
     if (category) testSeries.category = category;
     if (seriesType) testSeries.seriesType = seriesType;
+    if (examLevel) {
+      const normalized = String(examLevel).toLowerCase();
+      if (['inter', 'final'].includes(normalized)) testSeries.examLevel = normalized;
+    }
     if (pricing) testSeries.pricing = pricing;
     if (discountCodes) testSeries.discountCodes = discountCodes;
     if (subjects) testSeries.subjects = subjects;
@@ -599,11 +770,18 @@ export const calculatePricing = async (req, res) => {
     }
 
     // Calculate price using the pricing service
+    // Ensure any papersPerSubject configured on the testSeries (fixed entries)
+    // are forwarded inside the `pricing` object so service logic can honour them.
+    const pricingConfig = Object.assign({}, testSeries.pricing || {});
+    if (testSeries.papersPerSubject && Object.keys(testSeries.papersPerSubject).length > 0) {
+      pricingConfig.papersPerSubject = testSeries.papersPerSubject;
+    }
+
     const pricingResult = calculatePrice({
       seriesType: testSeries.seriesType,
       selectedSeries: selectedSeries || [],
       selectedSubjects,
-      pricing: testSeries.pricing,
+      pricing: pricingConfig,
       couponCode,
       coupons,
     });

@@ -14,11 +14,25 @@
  * @param {string[]} selectedSubjects - ['FR', 'AFM', ...] selected by user
  * @returns {number} Total paper count
  */
-export const calculatePaperCount = (seriesType, selectedSeries = [], selectedSubjects = []) => {
+export const calculatePaperCount = (seriesType, selectedSeries = [], selectedSubjects = [], pricing = {}) => {
   const subjectCount = selectedSubjects.length;
-  
   if (!subjectCount) return 0;
 
+  // if pricing object provides explicit papersPerSubject counts we should honour those
+  if (pricing.papersPerSubject) {
+    let total = 0;
+    selectedSubjects.forEach((sub) => {
+      total += pricing.papersPerSubject[sub] || getPapersPerSubject(seriesType);
+    });
+    if (seriesType === 'S1') {
+      // multiply by number of series configured or selected
+      const mult = pricing.seriesCount || Math.max(1, selectedSeries.length);
+      total *= mult;
+    }
+    return total;
+  }
+
+  // fallback to legacy rules when no explicit config available
   switch (seriesType) {
     case 'S1': {
       // S1: 1 paper per subject per series
@@ -71,76 +85,63 @@ export const calculatePrice = (params) => {
   let basePrice = 0;
   let appliedRule = '';
 
-  // New per-subject price mapping requested by product
-  const perSubjectTotalMap = {
-    1: 450,
-    2: 900,
-    3: 1350,
-    4: 1800,
-    5: 2250, // special cap for 5 subjects
-  };
+  // derive base per-subject price from config if available (default to 450)
+  const subjectPrice = pricing.subjectPrice || 450;
+
+  // series count is relevant only for S1; allow override via pricing config (useful for CA Inter)
+  const seriesMultiplier = seriesType === 'S1'
+    ? (pricing.seriesCount || Math.max(1, seriesCount))
+    : 1;
 
   // ============================================
   // S1 – Full Syllabus (Series-wise)
   // ============================================
   if (seriesType === 'S1') {
-    // Use new per-subject total mapping, multiplied by selected series count
-    const perSubjectTotal = perSubjectTotalMap[Math.min(subjectCount, 5)] || (450 * subjectCount);
-    basePrice = perSubjectTotal * Math.max(1, seriesCount);
-    appliedRule = `S1: ${subjectCount} subjects mapped total ${perSubjectTotal} × ${Math.max(1, seriesCount)} series`;
+    // simply charge subjectPrice for each selected subject, times number of series selected
+    basePrice = subjectPrice * subjectCount * seriesMultiplier;
+    appliedRule = `S1: ${subjectCount} subjects @ ₹${subjectPrice} × ${seriesMultiplier} series`;
   }
   // ============================================
   // S2 – 50% Syllabus (Group-wise, NO series)
   // ============================================
   else if (seriesType === 'S2') {
-    // Use new per-subject total mapping (no series multiplier for S2)
-    basePrice = perSubjectTotalMap[Math.min(subjectCount, 5)] || (450 * subjectCount);
-    appliedRule = `S2: ${subjectCount} subjects mapped total ${basePrice}`;
+    basePrice = subjectPrice * subjectCount;
+    appliedRule = `S2: ${subjectCount} subjects @ ₹${subjectPrice}`;
   }
   // ============================================
-  // S3 – 30% Syllabus (Group-wise, NO series)
+  // S3 – 30%/Chapterwise Syllabus (Group-wise, NO series)
   // ============================================
   else if (seriesType === 'S3') {
-    // Use new per-subject total mapping (no series multiplier for S3)
-    basePrice = perSubjectTotalMap[Math.min(subjectCount, 5)] || (450 * subjectCount);
-    appliedRule = `S3: ${subjectCount} subjects mapped total ${basePrice}`;
+    basePrice = subjectPrice * subjectCount;
+    appliedRule = `S3: ${subjectCount} subjects @ ₹${subjectPrice}`;
   }
   // ============================================
   // S4 – CA Successful Specials (Group-wise)
   // ============================================
   else if (seriesType === 'S4') {
-    // Rule 1: All 5 subjects → ₹6000 (30 papers)
-    if (subjectCount === 5) {
-      basePrice = 6000;
-      appliedRule = 'S4: All 5 subjects (30 papers)';
-    }
-    // Rule 2: Combo (exactly 3 subjects) → ₹3600
-    else if (subjectCount === 3) {
-      basePrice = 3600;
+    // Use pricing config when available (keep CA Final and CA Inter separate via pricing values)
+    const totalAvailableSubjects = pricing.papersPerSubject ? Object.keys(pricing.papersPerSubject).length : null;
+    if (pricing.comboPrice && subjectCount === 3) {
+      basePrice = pricing.comboPrice;
       appliedRule = `S4: Combo (${subjectCount} subjects, ${subjectCount * 6} papers)`;
-    }
-    // Rule 3: Individual subjects (per-subject ₹1200)
-    else {
+    } else if (pricing.allSubjectsPrice && totalAvailableSubjects && subjectCount === totalAvailableSubjects) {
+      basePrice = pricing.allSubjectsPrice;
+      appliedRule = `S4: All ${subjectCount} subjects (${totalAvailableSubjects * 6} papers)`;
+    } else {
       basePrice = (pricing.subjectPrice || 1200) * subjectCount;
       appliedRule = `S4: Individual subjects (${subjectCount}, ${subjectCount * 6} papers)`;
     }
   }
 
   // ============================================
-  // Apply coupon discount (only if total papers > 2)
+  // Apply coupon discount (allow for any non-zero selection)
   // ============================================
   let discountAmount = 0;
   let couponUsed = null;
-  const totalPapers = calculatePaperCount(seriesType, selectedSeries, selectedSubjects);
+  const totalPapers = calculatePaperCount(seriesType, selectedSeries, selectedSubjects, pricing);
 
-  const isEligibleForCoupon =
-    seriesType === 'S1'
-      ? totalPapers > 2
-      : seriesType === 'S2' || seriesType === 'S3'
-        ? subjectCount > 2
-        : seriesType === 'S4'
-          ? true
-          : false;
+  // Allow coupons for any positive selection (single subject / single paper included)
+  const isEligibleForCoupon = totalPapers > 0;
   if (couponCode && coupons[couponCode] && isEligibleForCoupon) {
     const coupon = coupons[couponCode];
     if (coupon.type === 'flat') {
@@ -154,6 +155,12 @@ export const calculatePrice = (params) => {
 
   const finalPrice = Math.max(0, basePrice - discountAmount);
 
+  // calculate papers per subject for breakdown (average or config-based)
+  let papersPerSub = 0;
+  if (subjectCount > 0) {
+    papersPerSub = Math.floor(totalPapers / subjectCount);
+  }
+
   return {
     basePrice,
     discountAmount,
@@ -165,8 +172,12 @@ export const calculatePrice = (params) => {
       seriesType,
       selectedSeriesCount: seriesCount,
       selectedSubjectsCount: subjectCount,
-      papersPerSubject: getPapersPerSubject(seriesType),
-      pricePerSubject: calculatePricePerSubject(seriesType, subjectCount),
+      papersPerSubject: papersPerSub,
+      pricePerSubject: pricing.subjectPrice
+        ? seriesType === 'S1'
+          ? pricing.subjectPrice * seriesMultiplier
+          : pricing.subjectPrice
+        : calculatePricePerSubject(seriesType, subjectCount),
     },
   };
 };

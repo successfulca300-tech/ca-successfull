@@ -130,27 +130,84 @@ export const uploadTestSeriesMedia = async (req, res) => {
     const fileUrl = `${endpointWithV1}/storage/buckets/${APPWRITE_BUCKET_ID}/files/${response.$id}/view?project=${APPWRITE_PROJECT_ID}`;
 
     // Save metadata to MongoDB (resolve or create TestSeries entry and mark new media as 'published')
-    try {
+      try {
       if (testSeriesId) {
         // Resolve testSeriesId param to DB TestSeries
         let testSeries = null;
+        // 1) Try as ObjectId
         if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
           testSeries = await TestSeries.findById(testSeriesId);
         }
+        // 2) Try fixedKey (case-insensitive) match
         if (!testSeries) {
-          const seriesType = String(testSeriesId || '').toUpperCase();
-          if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
-            testSeries = await TestSeries.findOne({ seriesType });
-            if (!testSeries) {
-              testSeries = await TestSeries.create({
-                title: `Test Series ${seriesType}`,
-                seriesType,
-                seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
-                category: null,
-                createdBy: req.user._id,
-                publishStatus: 'published',
-                isActive: true,
-              });
+          testSeries = await TestSeries.findOne({ fixedKey: { $regex: `^${testSeriesId}$`, $options: 'i' } });
+        }
+        // 3) Try plain seriesType like 'S1','S2' etc. BUT if incoming id has a prefix (e.g., 'inter-s1')
+        // prefer creating/using a managed fixedKey document instead of attaching to the generic seriesType doc.
+        if (!testSeries) {
+          const upper = String(testSeriesId || '').toUpperCase();
+          const hasPrefix = String(testSeriesId || '').includes('-');
+          if (['S1', 'S2', 'S3', 'S4'].includes(upper)) {
+            // Only use the shared seriesType doc when the incoming id is exactly 's1' (no prefix)
+            if (!hasPrefix) {
+              testSeries = await TestSeries.findOne({ seriesType: upper });
+              if (!testSeries) {
+                testSeries = await TestSeries.create({
+                  title: `Test Series ${upper}`,
+                  seriesType: upper,
+                  seriesTypeLabel: upper === 'S1' ? 'Full Syllabus' : upper === 'S2' ? '50% Syllabus' : upper === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                  category: null,
+                  createdBy: req.user._id,
+                  publishStatus: 'published',
+                  isActive: true,
+                  fixedKey: upper,
+                  examLevel: 'final',
+                });
+              }
+            }
+          }
+        }
+
+        // 4) Try to extract trailing s1..s4 from values like 'inter-s1'. For prefixed ids we MUST create or upsert
+        // a managed TestSeries with fixedKey=testSeriesId so media binds to the prefixed (inter/final) entry.
+        if (!testSeries) {
+          const m = String(testSeriesId || '').match(/(s[1-4])$/i);
+          if (m) {
+            const seriesType = m[1].toUpperCase();
+            const hasPrefix = String(testSeriesId || '').includes('-');
+            if (hasPrefix) {
+              // Try to find by fixedKey (case-insensitive) and create if missing
+              testSeries = await TestSeries.findOne({ fixedKey: { $regex: `^${testSeriesId}$`, $options: 'i' } });
+              if (!testSeries) {
+                const derivedExamLevel = String(testSeriesId || '').toLowerCase().startsWith('inter-') ? 'inter' : 'final';
+                testSeries = await TestSeries.create({
+                  title: `Test Series ${seriesType}`,
+                  seriesType,
+                  seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                  category: null,
+                  createdBy: req.user._id,
+                  publishStatus: 'published',
+                  isActive: true,
+                  fixedKey: testSeriesId,
+                  examLevel: derivedExamLevel,
+                });
+              }
+            } else {
+              // No prefix: fall back to seriesType doc if present
+              testSeries = await TestSeries.findOne({ seriesType });
+              if (!testSeries) {
+                testSeries = await TestSeries.create({
+                  title: `Test Series ${seriesType}`,
+                  seriesType,
+                  seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                  category: null,
+                  createdBy: req.user._id,
+                  publishStatus: 'published',
+                  isActive: true,
+                  fixedKey: testSeriesId,
+                  examLevel: 'final',
+                });
+              }
             }
           }
         }
@@ -191,9 +248,16 @@ export const uploadTestSeriesMedia = async (req, res) => {
             status: 'published',
           });
 
-          await newMedia.save();
-          dbSaved = true;
-          console.info(`Media saved to MongoDB: mediaId=${newMedia._id}, fileId=${response.$id}, testSeriesId=${testSeries._id}, mediaType=${normalizedMediaType}`);
+          try {
+            await newMedia.save();
+            dbSaved = true;
+            console.info(`Media saved to MongoDB: mediaId=${newMedia._id}, fileId=${response.$id}, testSeriesId=${testSeries._id}, mediaType=${normalizedMediaType}`);
+          } catch (saveErr) {
+            console.error('Failed to save TestSeriesMedia:', saveErr);
+            // attempt to clean up any saved archived docs left behind
+            try { await TestSeriesMedia.deleteMany({ testSeriesId: testSeries._id, mediaType: normalizedMediaType, status: 'archived' }); } catch (e) {}
+            throw saveErr;
+          }
         } else {
           console.warn(`TestSeries not found or auto-creation failed for id '${testSeriesId}'. Media metadata was not saved to MongoDB.`);
         }
@@ -207,14 +271,43 @@ export const uploadTestSeriesMedia = async (req, res) => {
     if (testSeriesId) {
       try {
         let testSeries = null;
+        // 1) Try as ObjectId
         if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
           testSeries = await TestSeries.findById(testSeriesId);
         }
+        // 2) Try fixedKey (case-insensitive) match
         if (!testSeries) {
-          const seriesType = String(testSeriesId || '').toUpperCase();
-          if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+          testSeries = await TestSeries.findOne({ fixedKey: { $regex: `^${testSeriesId}$`, $options: 'i' } });
+        }
+        // 3) Try plain seriesType like 'S1','S2' etc.
+        if (!testSeries) {
+          const upper = String(testSeriesId || '').toUpperCase();
+          if (['S1', 'S2', 'S3', 'S4'].includes(upper)) {
+            testSeries = await TestSeries.findOne({ seriesType: upper });
+              if (!testSeries) {
+              testSeries = await TestSeries.create({
+                title: `Test Series ${upper}`,
+                seriesType: upper,
+                seriesTypeLabel: upper === 'S1' ? 'Full Syllabus' : upper === 'S2' ? '50% Syllabus' : upper === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                category: null,
+                createdBy: req.user._id,
+                publishStatus: 'published',
+                isActive: true,
+                fixedKey: upper,
+                examLevel: 'final',
+              });
+            }
+          }
+        }
+
+        // 4) Try to extract trailing s1..s4 from values like 'inter-s1' and create a managed doc with fixedKey
+        if (!testSeries) {
+          const m = String(testSeriesId || '').match(/(s[1-4])$/i);
+          if (m) {
+            const seriesType = m[1].toUpperCase();
             testSeries = await TestSeries.findOne({ seriesType });
-            if (!testSeries) {
+              if (!testSeries) {
+              const derivedExamLevel = String(testSeriesId || '').toLowerCase().startsWith('inter-') ? 'inter' : 'final';
               testSeries = await TestSeries.create({
                 title: `Test Series ${seriesType}`,
                 seriesType,
@@ -223,6 +316,8 @@ export const uploadTestSeriesMedia = async (req, res) => {
                 createdBy: req.user._id,
                 publishStatus: 'published',
                 isActive: true,
+                fixedKey: testSeriesId,
+                examLevel: derivedExamLevel,
               });
             }
           }
@@ -239,7 +334,13 @@ export const uploadTestSeriesMedia = async (req, res) => {
               testSeries.videoFileId = response.$id;
               testSeries.videoType = 'UPLOAD';
             } else if (normalizedMediaType === 'thumbnail') {
+              // Set both thumbnail and cardThumbnail to ensure frontend shows the image
               testSeries.thumbnail = fileUrl;
+              testSeries.cardThumbnail = fileUrl;
+            }
+            // Ensure fixedKey set for non-ObjectId ids
+            if (!testSeries.fixedKey && !mongoose.Types.ObjectId.isValid(testSeriesId)) {
+              testSeries.fixedKey = testSeriesId;
             }
             await testSeries.save();
           }
@@ -368,16 +469,27 @@ export const getTestSeriesMedia = async (req, res) => {
     const query = { status: 'published' };
 
     if (testSeriesId) {
-      // Resolve shorthand seriesType or DB ObjectId to TestSeries _id
+      // Resolve fixedKey (case-insensitive), ObjectId, or plain seriesType to TestSeries _id
       let resolved = null;
+      // 1) Try as ObjectId
       if (mongoose.Types.ObjectId.isValid(String(testSeriesId))) {
         resolved = await TestSeries.findById(testSeriesId);
-      } else {
+      }
+
+      // 2) Try fixedKey (case-insensitive)
+      if (!resolved) {
+        resolved = await TestSeries.findOne({ fixedKey: { $regex: `^${String(testSeriesId || '')}$`, $options: 'i' } });
+      }
+
+      // 3) If still not found, handle plain seriesType WITHOUT prefix (e.g., 's1')
+      if (!resolved) {
         const seriesType = String(testSeriesId || '').toUpperCase();
-        if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
+        const hasPrefix = String(testSeriesId || '').includes('-');
+        if (['S1', 'S2', 'S3', 'S4'].includes(seriesType) && !hasPrefix) {
           resolved = await TestSeries.findOne({ seriesType });
         }
       }
+
       if (resolved) query.testSeriesId = resolved._id;
       else return res.status(200).json({ success: true, media: [] });
     }

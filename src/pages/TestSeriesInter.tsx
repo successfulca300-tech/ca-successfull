@@ -1,20 +1,19 @@
 import { useState, useEffect } from "react";
 import Layout from "@/components/layout/Layout";
-import { Eye, BarChart, Users, CheckCircle } from "lucide-react";
+import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
-import { FIXED_TEST_SERIES } from '@/data/fixedTestSeries';
+import { FIXED_TEST_SERIES_INTER } from '@/data/fixedTestSeries';
 import { testSeriesAPI } from '@/lib/api';
 
-const TestSeries = () => {
+const TestSeriesInter = () => {
   const [loading] = useState(false);
   const navigate = useNavigate();
   const [managedData, setManagedData] = useState<any>({});
   const [displayedSeries, setDisplayedSeries] = useState<any[]>([]);
   const [mediaMap, setMediaMap] = useState<Record<string, {thumbnail?: string}>>({});
 
-  // Fetch backend media (thumbnails) for fixed series so subadmin uploads are visible to all users
   const [mediaLoading, setMediaLoading] = useState<boolean>(true);
   useEffect(() => {
     const fetchMediaForAll = async () => {
@@ -22,7 +21,7 @@ const TestSeries = () => {
       const map: Record<string, {thumbnail?: string}> = {};
       try {
         await Promise.all(
-          FIXED_TEST_SERIES.map(async (s) => {
+          FIXED_TEST_SERIES_INTER.map(async (s) => {
             try {
               const res = await testSeriesAPI.getMedia(s._id, 'thumbnail');
               if (res && res.success && res.media && res.media.length > 0) {
@@ -41,13 +40,13 @@ const TestSeries = () => {
     fetchMediaForAll();
   }, []);
 
-  // Load managed data from localStorage on mount
   useEffect(() => {
+    // Fetch managed overrides from server for each fixed inter series
     const fetchManaged = async () => {
       const map: Record<string, any> = {};
       try {
         await Promise.all(
-          FIXED_TEST_SERIES.map(async (s) => {
+          FIXED_TEST_SERIES_INTER.map(async (s) => {
             try {
               const resp: any = await testSeriesAPI.getFixedManaged(s._id);
               if (resp && resp.success && resp.testSeries) {
@@ -61,8 +60,9 @@ const TestSeries = () => {
       } catch (e) {
         console.error('Failed to fetch managed series from server', e);
       } finally {
+        // fallback to any locally saved managed data for quick edits
         try {
-          const saved = localStorage.getItem('testSeriesManagement');
+          const saved = localStorage.getItem('testSeriesManagement_inter') || localStorage.getItem('testSeriesManagement');
           if (saved) {
             const local = JSON.parse(saved);
             Object.keys(local || {}).forEach(k => { if (!map[k]) map[k] = local[k]; });
@@ -74,9 +74,8 @@ const TestSeries = () => {
     fetchManaged();
   }, []);
 
-  // Set displayed series (active ones, sorted by displayOrder)
   useEffect(() => {
-    const activeSeries = FIXED_TEST_SERIES
+    const activeSeries = FIXED_TEST_SERIES_INTER
       .map((series, index) => {
         const managed = managedData[series._id] || {};
         const backendThumb = mediaMap[series._id]?.thumbnail;
@@ -85,7 +84,7 @@ const TestSeries = () => {
           title: managed.cardTitle || managed.title || series.title,
           description: managed.cardDescription || managed.description || series.description,
           thumbnail: managed.cardThumbnail || backendThumb || series.thumbnail,
-          isActive: managed.isActive !== false, // Default to true
+          isActive: managed.isActive !== false,
           displayOrder: managed.displayOrder !== undefined ? managed.displayOrder : index,
         };
       })
@@ -102,17 +101,16 @@ const TestSeries = () => {
       <div className="bg-primary py-12">
         <div className="container mx-auto px-4">
           <h1 className="text-3xl md:text-4xl font-bold text-primary-foreground text-center">
-            Test Series
+            CA Inter Test Series
           </h1>
           <p className="text-primary-foreground/80 text-center mt-2">
-            Practice tests designed by Teachers for effective exam preparation
+            Practice tests designed by Teachers for effective CA Inter preparation
           </p>
         </div>
       </div>
 
       <section className="py-12 bg-background">
         <div className="container mx-auto px-4">
-          {/* Cards Grid - NO FILTERS */}
           {mediaLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[1,2,3,4].map(i => (
@@ -137,14 +135,12 @@ const TestSeries = () => {
                   key={test._id}
                   className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200"
                 >
-                  {/* Card Header - Title */}
                   <div className="p-4 border-b border-gray-100 h-20 flex flex-col justify-center">
                     <h3 className="text-lg font-bold text-gray-900 mb-0 line-clamp-2">
                       {test.title}
                     </h3>
                   </div>
 
-                  {/* Card Middle - Thumbnail Image (larger) */}
                   <div className="w-full h-64 bg-gray-100 overflow-hidden">
                     {mediaLoading ? (
                       <Skeleton className="h-full w-full" />
@@ -163,14 +159,9 @@ const TestSeries = () => {
                     )}
                   </div>
 
-                  {/* Card Footer - Price Label & Button */}
                   <div className="p-4 space-y-3">
                     <div>
-                      { (test.seriesType === 'S4') ? (
-                        <p className="text-sm text-muted-foreground">Starting from <span className="font-semibold">₹{test.pricing?.subjectPrice ?? 1200}</span></p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Started from <span className="font-semibold">₹{test.pricing?.subjectPrice ?? 450}</span></p>
-                      ) }
+                      <p className="text-sm text-muted-foreground">Starting from <span className="font-semibold">₹{test.pricing?.subjectPrice ?? 400}</span></p>
                     </div>
 
                     <Button
@@ -191,38 +182,10 @@ const TestSeries = () => {
               </p>
             </div>
           )}
-
-          {/* Why Choose Section */}
-          {/* <div className="mt-16 bg-secondary/30 rounded-2xl p-8">
-            <h2 className="text-2xl font-bold text-center text-foreground mb-8">Why Choose Our Test Series?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center p-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <BarChart className="text-primary" size={32} />
-                </div>
-                <h3 className="font-semibold text-foreground mb-2">Detailed Analytics</h3>
-                <p className="text-muted-foreground text-sm">Track your progress with comprehensive performance reports</p>
-              </div>
-              <div className="text-center p-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Users className="text-primary" size={32} />
-                </div>
-                <h3 className="font-semibold text-foreground mb-2">Performance Insights</h3>
-                <p className="text-muted-foreground text-sm">Track your progress with clear subject-wise feedback</p>
-              </div>
-              <div className="text-center p-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="text-primary" size={32} />
-                </div>
-                <h3 className="font-semibold text-foreground mb-2">Expert Solutions</h3>
-                <p className="text-muted-foreground text-sm">Detailed solutions and explanations by subject experts</p>
-              </div>
-            </div>
-          </div> */}
         </div>
       </section>
     </Layout>
   );
 };
 
-export default TestSeries;
+export default TestSeriesInter;

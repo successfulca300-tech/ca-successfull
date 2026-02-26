@@ -73,7 +73,7 @@ const CaInter: FC = () => {
                 <p className="text-md text-gray-600 mt-2">
                   Join our waitlist for exclusive early-bird discounts and launch updates.
                 </p><br />
-                <p><a href="https://forms.gle/2nqz9RpQYFYCiwzt5" target='_blank'>Register  Your Self 👉🏻 https://forms.gle/2nqz9RpQYFYCiwzt5</a></p>
+                <p><strong><a href="https://forms.gle/2nqz9RpQYFYCiwzt5" target='_blank'>Register  Your Self 👉🏻 https://forms.gle/2nqz9RpQYFYCiwzt5</a></strong></p>
               </div>
               
               <div className="relative min-h-[500px]">

@@ -3,7 +3,13 @@ export interface FixedSeries {
   title: string;
   description: string;
   seriesType: 'S1' | 'S2' | 'S3' | 'S4';
-  seriesTypeLabel: 'Full Syllabus' | '50% Syllabus' | '30% Syllabus' | 'CA Successful Specials';
+  // description for UI cards, may include custom labels per curriculum
+  seriesTypeLabel:
+    | 'Full Syllabus'
+    | '50% Syllabus'
+    | '30% Syllabus'
+    | 'CA Successful Specials'
+    | 'Chapterwise';
   price: number;
   originalPrice?: number;
   thumbnail?: string;
@@ -11,12 +17,18 @@ export interface FixedSeries {
   mode?: string;
   group?: string;
   subjects?: string[];
+  groups?: {
+    group1?: string[];
+    group2?: string[];
+  };
   pricing?: {
     subjectPrice?: number; // ₹450 per individual subject
+    seriesCount?: number; // override number of series for S1 (e.g. inter-s1 has 2)
     comboPrice?: number; // ₹1200 for 3+ subjects
     allSubjectsPrice?: number; // ₹2000 for all 5 subjects (single series for S1)
     allSeriesAllSubjectsPrice?: number; // ₹6000 for all 3 series + all subjects (S1 only)
     paperPrice?: number; // ₹400 per paper
+    papersPerSubject?: { [subject: string]: number }; // papers per subject breakdown
   };
   discountCodes?: Array<{ code: string; type: 'flat' | 'percent'; value: number; label?: string }>;
   
@@ -26,7 +38,7 @@ export interface FixedSeries {
   testSchedule?: Array<{ testName: string; date: string; subjects: string }>;
   instructions?: string;
   sampleAnswerSheets?: Array<{ name: string; url: string }>;
-  papersPerSubject?: { [subject: string]: number };
+  papersPerSubject?: { [subject: string]: number }; // kept for backward compatibility
   
   // Series details (for S1: 3 series, for others: group-wise)
   seriesDates?: {
@@ -56,7 +68,23 @@ export const FIXED_TEST_SERIES: FixedSeries[] = [
   {
     _id: 's1',
     title: 'Full Syllabus Test Series',
-    description: 'Comprehensive full-syllabus test series with 3 series (Series 1, 2, 3), each containing 1 test paper per subject.',
+    description: `Full Syllabus Test Series
+
+Best suited for students who have completed the syllabus
+
+Full-length exam-oriented question papers
+
+Available in Series 1, Series 2 & Series 3
+
+Helps in real exam time management practice
+
+Enroll subject-wise, group-wise or series-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
     seriesType: 'S1',
     seriesTypeLabel: 'Full Syllabus',
     price: 450,
@@ -148,7 +176,23 @@ Coverage:
   {
     _id: 's2',
     title: '50% Syllabus Test Series',
-    description: 'Focused test series covering the most important 50% of the syllabus. 2 test papers per subject across all groups.',
+    description: `50% Syllabus Test Series
+
+Ideal for students who want to test preparation in two phases
+
+2 Papers per subject
+
+50% + 50% syllabus coverage = 100%
+
+Helps in gradual and structured syllabus completion
+
+Enroll subject-wise, group-wise or in combinations
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
     seriesType: 'S2',
     seriesTypeLabel: '50% Syllabus',
     price: 2000,
@@ -213,7 +257,25 @@ Coverage:
   {
     _id: 's3',
     title: '30% Syllabus Test Series',
-    description: 'Short, high-yield test series covering the top 30% topics. 3 test papers per subject across all groups.',
+    description: `30% Syllabus Test Series
+
+Perfect for early-stage CA preparation
+
+Syllabus divided into smaller and manageable parts
+
+3 Papers per subject
+
+30% + 30% + 30% syllabus coverage = 100%
+
+Helps in concept-wise and topic-wise preparation
+
+Enroll subject-wise, group-wise or in combinations
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
     seriesType: 'S3',
     seriesTypeLabel: '30% Syllabus',
     price: 2000,
@@ -278,7 +340,27 @@ Coverage:
   {
     _id: 's4',
     title: 'CA Successful Specials',
-    description: 'Special curated test series with 6 papers per subject combining 100%, 50%, and 30% syllabus coverage.',
+    description: `CA Successful Test Series
+
+Designed for serious CA aspirants aiming for exam success
+
+Total 6 papers per subject for multiple revisions
+
+1 Full syllabus paper (100% coverage)
+
+2 Half syllabus papers (50% + 50%)
+
+3 Part syllabus papers (30% + 30% + 30%)
+
+Complete syllabus covered with repeated practice
+
+Enroll subject-wise or group-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
     seriesType: 'S4',
     seriesTypeLabel: 'CA Successful Specials',
     price: 2000,
@@ -348,7 +430,352 @@ Coverage:
   },
 ];
 
+export const FIXED_TEST_SERIES_INTER: FixedSeries[] = [
+  {
+    _id: 'inter-s1',
+    title: 'Full Syllabus Test Series (Inter)',
+    description: `Full Syllabus Test Series for CA Inter
+
+Best suited for students who have completed the syllabus
+
+Full-length exam-oriented question papers
+
+Available in Series 1 & Series 2
+
+Helps in real exam time management practice
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+    seriesType: 'S1',
+    seriesTypeLabel: 'Full Syllabus',
+    price: 400,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    groups: {
+      group1: ['Advance accounting', 'Corporate law', 'Taxation'],
+      group2: ['Costing', 'Audit', 'FM SM'],
+    },
+    pricing: {
+      subjectPrice: 400,
+      seriesCount: 2, // inter full syllabus includes two series by default
+      comboPrice: 1200,
+      allSubjectsPrice: 2000,
+      allSeriesAllSubjectsPrice: 4000,
+      paperPrice: 400,
+      papersPerSubject: {
+        'Advance accounting': 1,
+        'Corporate law': 1,
+        'Taxation': 1,
+        'Costing': 1,
+        'Audit': 1,
+        'FM SM': 1,
+      },
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 100, label: 'CAINTER2026 - ₹100 off' },
+    ],
+    highlights: [
+      '2 Complete Series (Series 1, Series 2)',
+      '1 Test Paper Per Subject Per Series',
+      '12 Total Test Papers for All 6 Subjects',
+      'Full Syllabus Coverage for CA Inter',
+      'Group-wise Selection Support',
+    ],
+    syllabusBreakdown: `
+Full Syllabus Test Series (Inter) Structure:
+
+Series: Series 1, Series 2 (2 complete series)
+
+Groups & Subjects:
+- Group 1: Advance accounting, Corporate law, Taxation (3 subjects)
+- Group 2: Costing, Audit, FM SM (3 subjects)
+- Both: All 6 Subjects
+
+Papers per Subject:
+- Each subject: 1 paper per series
+- Total: 2 series × 6 subjects × 1 paper = 12 papers (all subjects)
+- Group 1: 2 series × 3 subjects × 1 paper = 6 papers
+- Group 2: 2 series × 3 subjects × 1 paper = 6 papers
+
+Coverage:
+- Complete syllabus coverage across both series
+- Group-wise categorization for focused preparation
+    `,
+    papersPerSubject: {
+      'Advance accounting': 1,
+      'Corporate law': 1,
+      'Taxation': 1,
+      'Costing': 1,
+      'Audit': 1,
+      'FM SM': 1,
+    },
+    cardTitle: 'Full Syllabus (Inter)',
+    cardDescription: '2 Series × 1 Paper Per Subject = Complete Prep',
+    isActive: true,
+    displayOrder: 1,
+  },
+  {
+    _id: 'inter-s2',
+    title: '50% Syllabus Test Series (Inter)',
+    description: `50% Syllabus Test Series (CA Inter)
+
+Focused 50% syllabus coverage for CA Inter
+
+2 Papers per subject
+
+50% + 50% syllabus coverage = 100%
+
+Helps in gradual and structured syllabus completion
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+    seriesType: 'S2',
+    seriesTypeLabel: '50% Syllabus',
+    price: 400,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    groups: {
+      group1: ['Advance accounting', 'Corporate law', 'Taxation'],
+      group2: ['Costing', 'Audit', 'FM SM'],
+    },
+    pricing: {
+      subjectPrice: 400,
+      comboPrice: 1200,
+      allSubjectsPrice: 2400,
+      paperPrice: 400,
+      papersPerSubject: {
+        'Advance accounting': 2,
+        'Corporate law': 2,
+        'Taxation': 2,
+        'Costing': 2,
+        'Audit': 2,
+        'FM SM': 2,
+      },
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 100, label: 'CAINTER2026 - ₹100 off' },
+    ],
+    highlights: [
+      '2 Papers Per Subject',
+      '12 Total Test Papers for All 6 Subjects',
+      '50% Syllabus Coverage',
+      'Group-wise Selection Support',
+      'High-Yield Topics Focus',
+    ],
+    syllabusBreakdown: `
+50% Syllabus Test Series (Inter) Structure:
+
+Groups & Subjects:
+- Group 1: Advance accounting, Corporate law, Taxation (3 subjects)
+- Group 2: Costing, Audit, FM SM (3 subjects)
+- Both: All 6 Subjects
+
+Papers per Subject: 2 papers
+
+Coverage:
+- Covers the most important 50% of the syllabus
+- Focus on high-yield topics
+- Group 1 (3 subjects): 6 papers
+- Group 2 (3 subjects): 6 papers
+- Both Groups (6 subjects): 12 papers
+    `,
+    cardTitle: '50% Syllabus (Inter)',
+    cardDescription: '2 Papers Per Subject — Targeted Prep',
+    isActive: true,
+    displayOrder: 2,
+  },
+  {
+    _id: 'inter-s3',
+    title: 'Chapterwise Test Series (Inter)',
+    description: `Chapterwise Test Series (CA Inter)
+
+Chapterwise practice divided into manageable parts
+
+5 Papers per subject
+
+Chapter-by-chapter coverage enabling concept clarity
+
+Perfect for topic-wise and chapter-wise preparation
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+    seriesType: 'S3',
+    seriesTypeLabel: 'Chapterwise',
+    price: 800,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    groups: {
+      group1: ['Advance accounting', 'Corporate law', 'Taxation'],
+      group2: ['Costing', 'Audit', 'FM SM'],
+    },
+    pricing: {
+      subjectPrice: 800,
+      comboPrice: 2400,
+      allSubjectsPrice: 4800,
+      paperPrice: 800,
+      papersPerSubject: {
+        'Advance accounting': 5,
+        'Corporate law': 5,
+        'Taxation': 5,
+        'Costing': 5,
+        'Audit': 5,
+        'FM SM': 5,
+      },
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 100, label: 'CAINTER2026 - ₹100 off' },
+    ],
+    highlights: [
+      '5 Papers Per Subject',
+      '30 Total Test Papers for All 6 Subjects',
+      'Chapterwise Practice Coverage',
+      'Group-wise Selection Support',
+      'Deep Practice Material',
+    ],
+    syllabusBreakdown: `
+Chapterwise Test Series (Inter) Structure:
+
+Groups & Subjects:
+- Group 1: Advance accounting, Corporate law, Taxation (3 subjects)
+- Group 2: Costing, Audit, FM SM (3 subjects)
+- Both: All 6 Subjects
+
+Papers per Subject: 5 papers
+
+Subject-wise Breakdown:
+- Advance accounting: 5 papers • ₹400
+- Corporate law: 5 papers • ₹400
+- Taxation: 5 papers • ₹400
+- Costing: 5 papers • ₹400
+- Audit: 5 papers • ₹400
+- FM SM: 5 papers • ₹400
+
+Coverage:
+- Comprehensive chapterwise practice
+- Group 1 (3 subjects): 15 papers
+- Group 2 (3 subjects): 15 papers
+- Both Groups (6 subjects): 30 papers
+    `,
+    cardTitle: 'Chapterwise (Inter)',
+    cardDescription: '5 Papers Per Subject — Deep Practice',
+    isActive: true,
+    displayOrder: 3,
+  },
+  {
+    _id: 'inter-s4',
+    title: 'CA Successful Specials (Inter)',
+    description: `CA Successful Specials (Inter)
+
+Designed for serious CA Inter aspirants aiming for exam success
+
+Total 8 papers per subject for multiple revisions
+
+1 Full syllabus paper (100% coverage)
+
+2 Half syllabus papers (50% + 50%)
+
+5 Chapterwise Full syllabus papers (5 Papers)
+
+Comprehensive practice for all topics
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
+    seriesType: 'S4',
+    seriesTypeLabel: 'CA Successful Specials',
+    price: 1600,
+    mode: 'Online',
+    group: 'Both',
+    subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
+    groups: {
+      group1: ['Advance accounting', 'Corporate law', 'Taxation'],
+      group2: ['Costing', 'Audit', 'FM SM'],
+    },
+    pricing: {
+      subjectPrice: 1600,
+      comboPrice: 4800,
+      allSubjectsPrice: 9600,
+      paperPrice: 400,
+      papersPerSubject: {
+        'Advance accounting': 8,
+        'Corporate law': 8,
+        'Taxation': 8,
+        'Costing': 8,
+        'Audit': 8,
+        'FM SM': 8,
+      },
+    },
+    discountCodes: [
+      { code: 'CAINTER2026', type: 'flat', value: 200, label: 'CAINTER2026 - ₹200 off' },
+    ],
+    highlights: [
+      '8 Papers Per Subject',
+      '48 Total Test Papers for All 6 Subjects',
+      'Expert Curated Series',
+      'Group-wise Selection Support',
+      'Complete Intensive Coverage',
+    ],
+    syllabusBreakdown: `
+CA Successful Specials (Inter) Structure:
+
+Series: Group-wise (NOT series-wise)
+
+Groups & Subjects:
+- Group 1: Advance accounting, Corporate law, Taxation (3 subjects)
+- Group 2: Costing, Audit, FM SM (3 subjects)
+- Both: All 6 Subjects
+
+Papers per Subject: 8 papers
+
+Subject-wise Breakdown:
+- Advance accounting: 8 papers • ₹1,200
+- Corporate law: 8 papers • ₹1,200
+- Taxation: 8 papers • ₹1,200
+- Costing: 8 papers • ₹1,200
+- Audit: 8 papers • ₹1,200
+- FM SM: 8 papers • ₹1,200
+
+Coverage:
+- Comprehensive expert-curated papers
+- Group 1 (3 subjects): 24 papers
+- Group 2 (3 subjects): 24 papers
+- Both Groups (6 subjects): 48 papers
+- Complete preparation from CA Successful team
+    `,
+    cardTitle: 'CA Successful Specials (Inter)',
+    cardDescription: '8 Papers Per Subject — Intensive',
+    isActive: true,
+    displayOrder: 4,
+  },
+];
+
 export function getFixedSeriesById(id?: string) {
   if (!id) return null;
-  return FIXED_TEST_SERIES.find((s) => s._id === id) || null;
+  const fromFinal = FIXED_TEST_SERIES.find((s) => s._id === id);
+  if (fromFinal) return fromFinal;
+  const fromInter = FIXED_TEST_SERIES_INTER.find((s) => s._id === id);
+  if (fromInter) return fromInter;
+  return null;
 }

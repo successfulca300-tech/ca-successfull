@@ -16,9 +16,22 @@ const testSeriesSchema = new mongoose.Schema(
       enum: ['S1', 'S2', 'S3', 'S4'],
       required: [true, 'Please specify series type (S1, S2, S3, or S4)'],
     },
+    // Optional fixed key for mapping frontend fixed entries (e.g., 's1' or 'inter-s1')
+    fixedKey: {
+      type: String,
+      trim: true,
+      index: true,
+    },
     seriesTypeLabel: {
       type: String,
       enum: ['Full Syllabus', '50% Syllabus', '30% Syllabus', 'CA Successful Specials'],
+      required: true,
+    },
+    // Exam level to separate CA Inter vs CA Final management
+    examLevel: {
+      type: String,
+      enum: ['inter', 'final'],
+      default: 'final',
       required: true,
     },
     // Category is optional for auto-created shorthand series (S1..S4)

@@ -27,7 +27,7 @@ import {
   Download,
 } from "lucide-react";
 import { toast } from "sonner";
-import { FIXED_TEST_SERIES } from "@/data/fixedTestSeries";
+import { FIXED_TEST_SERIES, FIXED_TEST_SERIES_INTER } from "@/data/fixedTestSeries";
 import { testSeriesAPI } from "@/lib/api";
 
 // Subject name mapping
@@ -36,11 +36,19 @@ const subjectNames: Record<string, string> = {
   'AFM': 'Advanced Financial Management',
   'Audit': 'Audit and Assurance',
   'DT': 'Direct Tax',
-  'IDT': 'Indirect Tax'
+  'IDT': 'Indirect Tax',
+  'Advance accounting': 'Advance Accounting',
+  'Corporate law': 'Corporate Law',
+  'Taxation': 'Taxation',
+  'Costing': 'Costing',
+  'FM SM': 'Financial Management & Strategic Management'
 };
 
-// Subject order for consistent display
-const subjectOrder = ['FR', 'AFM', 'Audit', 'DT', 'IDT'];
+// Subject order for consistent display (CA Final first, then CA Inter)
+const subjectOrder = ['FR', 'AFM', 'Audit', 'DT', 'IDT', 'Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'FM SM'];
+
+// Get all series (both CA Final and CA Inter)
+const getAllSeries = () => [...FIXED_TEST_SERIES, ...FIXED_TEST_SERIES_INTER];
 
 interface SeriesData {
   [seriesId: string]: any;
@@ -148,7 +156,7 @@ const SubadminTestSeries = () => {
     }
     // Initialize all series with defaults
     const initialized: SeriesData = saved ? JSON.parse(saved) : {};
-    FIXED_TEST_SERIES.forEach((s) => {
+    getAllSeries().forEach((s) => {
       if (!initialized[s._id]) {
         initialized[s._id] = {
           _id: s._id,
@@ -176,19 +184,21 @@ const SubadminTestSeries = () => {
           cardDescription: s.description || "",
           cardThumbnail: "",
           isActive: true,
-          displayOrder: parseInt(s._id.substring(1)) || 0,
+          displayOrder: s._id.startsWith('inter-') ? parseInt(s._id.substring(7)) + 4 : parseInt(s._id.substring(1)) || 0,
         };
       }
     });
     setSeriesData(initialized);
 
     // Fetch existing media for all series
-    FIXED_TEST_SERIES.forEach((s) => {
+    getAllSeries().forEach((s) => {
       fetchMediaForSeries(s._id);
     });
   }, []);
 
   const currentSeries = seriesData[activeTab];
+
+  
 
   const updateField = (field: string, value: any) => {
     setSeriesData((prev) => ({
@@ -206,16 +216,16 @@ const SubadminTestSeries = () => {
       // Save local copy first
       localStorage.setItem("testSeriesManagement", JSON.stringify(seriesData));
 
-      // Persist server-managed data for all fixed series (s1..s4)
-      const fixedKeys = Object.keys(seriesData).filter(k => /^s[1-4]$/i.test(k));
-      if (fixedKeys.length === 0) {
-        toast.success("Test Series updated locally");
+      // Only persist the currently active tab/series instead of saving all
+      const key = activeTab;
+      const payload = seriesData[key];
+      if (!payload) {
+        toast.success("Nothing to save for the current series");
         return;
       }
 
-      for (const key of fixedKeys) {
-        const payload = seriesData[key];
-        if (!payload) continue;
+      // If it's a fixed series (s1..s4 or inter-s1..inter-s4), call upsertFixed
+      if (/^(s[1-4]|inter-s[1-4])$/i.test(key)) {
         try {
           const resp: any = await testSeriesAPI.upsertFixed(key, payload);
           if (resp?.success && resp.testSeries) {
@@ -231,6 +241,26 @@ const SubadminTestSeries = () => {
           console.warn(`Failed to save ${key} to server:`, err);
           toast.error(`Saved ${key.toUpperCase()} locally but failed to persist to server`);
         }
+      } else if (payload._id) {
+        // If it's a managed DB series with an _id, call update
+        try {
+          const resp: any = await testSeriesAPI.update(payload._id, payload);
+          if (resp?.success && resp.testSeries) {
+            const updated = resp.testSeries;
+            const newSeriesData = { ...seriesData, [key]: { ...(seriesData[key] || {}), ...updated } };
+            setSeriesData(newSeriesData);
+            localStorage.setItem("testSeriesManagement", JSON.stringify(newSeriesData));
+            toast.success(`Saved ${key.toUpperCase()} data to server`);
+          } else {
+            toast.success(`Saved ${key.toUpperCase()} locally (server did not return updated data)`);
+          }
+        } catch (err) {
+          console.warn(`Failed to update series ${key}:`, err);
+          toast.error(`Saved ${key.toUpperCase()} locally but failed to persist to server`);
+        }
+      } else {
+        // Fallback: nothing to persist server-side
+        toast.success("Test Series updated locally");
       }
     } catch (error) {
       console.error("Error saving:", error);
@@ -241,7 +271,7 @@ const SubadminTestSeries = () => {
   };
 
   const getSeriesCards = (): SeriesCard[] => {
-    return FIXED_TEST_SERIES.map((fixed) => {
+    return getAllSeries().map((fixed) => {
       const data = seriesData[fixed._id] || {};
       return {
         _id: fixed._id,
@@ -256,6 +286,18 @@ const SubadminTestSeries = () => {
   };
 
   const seriesCards = getSeriesCards();
+
+  // Get available subjects for the currently selected series
+  const getAvailableSubjects = () => {
+    const series = getAllSeries().find(s => s._id === activeTab);
+    return series?.subjects || [];
+  };
+
+  // Helpers for the selected fixed series
+  const fixedForActive = getAllSeries().find(s => s._id === activeTab);
+  const isS1Selected = fixedForActive?.seriesType === 'S1';
+  const fixedSeriesCountForActive = (fixedForActive as any)?.pricing?.seriesCount || (fixedForActive?._id && fixedForActive._id.startsWith('inter-') ? 2 : 3);
+  const availableSubjectsForActive = getAvailableSubjects();
 
   const addHighlight = () => {
     const highlights = currentSeries?.highlights || [];
@@ -483,7 +525,7 @@ const SubadminTestSeries = () => {
           <Card className="mb-8">
             <CardHeader>
               <CardTitle>
-                Manage {currentSeries.cardTitle || FIXED_TEST_SERIES.find(s => s._id === activeTab)?.title}
+                Manage {currentSeries.cardTitle || getAllSeries().find(s => s._id === activeTab)?.title}
               </CardTitle>
               <CardDescription>
                 Edit details, upload videos, and manage series content
@@ -755,8 +797,9 @@ const SubadminTestSeries = () => {
                       </Button>
                     </div>
 
-                    {/* Series Dates for S1 */}
-<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Series Dates for S1 (Final or Inter S1) */}
+                    {isS1Selected && (
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
                         <label className="block text-sm font-semibold mb-2">
                           Series 1 Upload Date
@@ -843,48 +886,54 @@ const SubadminTestSeries = () => {
                             }}
                           />
                         </div>
-                    </div>
+                      </div>
+                    )}
 
                       {/* Subject-wise Date Schedule */}
-                      {activeTab === 's1' && (
+                      {isS1Selected && (
                         <div className="border-t pt-6">
                           <h4 className="text-lg font-semibold mb-2">Subject-wise Date Schedule</h4>
                           <p className="text-sm text-muted-foreground mb-6">
-                            Add dates for each subject across all 3 series. This schedule will be displayed to users instead of the "How to Use" section.
+                            Add dates for each subject across the series for this curriculum. This schedule will be displayed to users instead of the "How to Use" section.
                           </p>
                         <div className="border border-border rounded-lg overflow-hidden bg-white">
                           <table className="w-full">
                             <thead>
                               <tr className="bg-gradient-to-r from-blue-100 to-blue-50 border-b border-border">
-                                <th className="px-6 py-4 text-left text-sm font-bold text-gray-900 w-40">Subject</th>
-                                <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                                  <div className="text-center">Series 1 Date</div>
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                                  <div className="text-center">Series 2 Date</div>
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
-                                  <div className="text-center">Series 3 Date</div>
-                                </th>
-                              </tr>
+                                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900 w-40">Subject</th>
+                                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
+                                    <div className="text-center">Series 1 Date</div>
+                                  </th>
+                                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
+                                    <div className="text-center">Series 2 Date</div>
+                                  </th>
+                                  {(() => {
+                                    // Determine whether this S1 uses 3 series or 2 (Inter)
+                                    const fixed = getAllSeries().find(s => s._id === activeTab);
+                                    const fixedSeriesCount = (fixed as any)?.pricing?.seriesCount || (fixed?._id && fixed._id.startsWith('inter-') ? 2 : 3);
+                                    return fixedSeriesCount >= 3 ? (
+                                      <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">
+                                        <div className="text-center">Series 3 Date</div>
+                                      </th>
+                                    ) : null;
+                                  })()}
+                                </tr>
                             </thead>
                             <tbody>
                               {(() => {
-                                const defaultSchedule = [
-                                  { subject: 'FR', series1Date: '', series2Date: '', series3Date: '' },
-                                  { subject: 'AFM', series1Date: '', series2Date: '', series3Date: '' },
-                                  { subject: 'Audit', series1Date: '', series2Date: '', series3Date: '' },
-                                  { subject: 'DT', series1Date: '', series2Date: '', series3Date: '' },
-                                  { subject: 'IDT', series1Date: '', series2Date: '', series3Date: '' },
-                                ];
-                                
-                                // Always ensure we have all 5 subjects
+                                // Use only subjects relevant to the currently selected series (Final vs Inter)
+                                const availableSubjects = availableSubjectsForActive;
+                                const defaultSchedule = availableSubjects.map((sub) => ({ subject: sub, series1Date: '', series2Date: '', series3Date: '' }));
+
                                 let schedule = currentSeries.subjectDateSchedule && currentSeries.subjectDateSchedule.length > 0
                                   ? currentSeries.subjectDateSchedule
                                   : defaultSchedule;
 
-                                // Merge with default to ensure all subjects are present
-                                const mergedSchedule = subjectOrder.map(subjectCode => {
+                                // Determine series count for this fixed series (default to 3 for Final, 2 for Inter)
+                                const fixedSeriesCount = fixedSeriesCountForActive;
+
+                                // Merge with availableSubjects to ensure only relevant subjects are shown
+                                const mergedSchedule = availableSubjects.map(subjectCode => {
                                   const existingRow = schedule.find((s: any) => s.subject === subjectCode);
                                   return existingRow || { subject: subjectCode, series1Date: '', series2Date: '', series3Date: '' };
                                 });
@@ -896,7 +945,7 @@ const SubadminTestSeries = () => {
                                         {subjectNames[row.subject] || row.subject}
                                       </div>
                                     </td>
-                                    <td className="px-6 py-4">
+                                      <td className="px-6 py-4">
                                       <Input
                                         type="date"
                                         value={row.series1Date || ''}
@@ -924,20 +973,22 @@ const SubadminTestSeries = () => {
                                         className="text-sm w-full"
                                       />
                                     </td>
-                                    <td className="px-6 py-4">
-                                      <Input
-                                        type="date"
-                                        value={row.series3Date || ''}
-                                        placeholder="dd-mm-yyyy"
-                                        onChange={(e) => {
-                                          const newSchedule = mergedSchedule.map((s: any, i: number) => 
-                                            i === index ? { ...s, series3Date: e.target.value } : s
-                                          );
-                                          updateField('subjectDateSchedule', newSchedule);
-                                        }}
-                                        className="text-sm w-full"
-                                      />
-                                    </td>
+                                    {fixedSeriesCount >= 3 && (
+                                        <td className="px-6 py-4">
+                                          <Input
+                                            type="date"
+                                            value={row.series3Date || ''}
+                                            placeholder="dd-mm-yyyy"
+                                            onChange={(e) => {
+                                              const newSchedule = mergedSchedule.map((s: any, i: number) => 
+                                                i === index ? { ...s, series3Date: e.target.value } : s
+                                              );
+                                              updateField('subjectDateSchedule', newSchedule);
+                                            }}
+                                            className="text-sm w-full"
+                                          />
+                                        </td>
+                                    )}
                                   </tr>
                                 ));
                               })()}
@@ -1016,8 +1067,8 @@ const SubadminTestSeries = () => {
                           <div>
                             <h4 className="text-lg font-semibold mb-4">Upload S1 Full Syllabus Test Papers</h4>
                             <p className="text-sm text-muted-foreground mb-4">
-                              S1 has 3 series, each containing 1 test paper per subject (5 subjects total: FR, AFM, Audit, DT, IDT)
-                            </p>
+                                S1 has {fixedSeriesCountForActive} series, each containing 1 test paper per subject ({availableSubjectsForActive.length} subjects)
+                              </p>
                           </div>
 
                           {/* S1 Upload Form */}
@@ -1034,9 +1085,9 @@ const SubadminTestSeries = () => {
                                     onChange={(e) => setPaperForm({ ...paperForm, series: e.target.value })}
                                     className="w-full p-2 border rounded"
                                   >
-                                    <option value="series1">Series 1</option>
-                                    <option value="series2">Series 2</option>
-                                    <option value="series3">Series 3</option>
+                                    {Array.from({ length: fixedSeriesCountForActive }, (_, i) => (
+                                      <option key={i} value={`series${i+1}`}>Series {i+1}</option>
+                                    ))}
                                   </select>
                                 </div>
                                 <div>
@@ -1046,11 +1097,9 @@ const SubadminTestSeries = () => {
                                     onChange={(e) => setPaperForm({ ...paperForm, subject: e.target.value })}
                                     className="w-full p-2 border rounded"
                                   >
-                                    <option value="FR">FR (Financial Reporting)</option>
-                                    <option value="AFM">AFM (Advanced Financial Management)</option>
-                                    <option value="Audit">Audit (Audit and Assurance)</option>
-                                    <option value="DT">DT (Direct Taxation)</option>
-                                    <option value="IDT">IDT (Indirect Taxation)</option>
+                                    {availableSubjectsForActive.map((subject) => (
+                                      <option key={subject} value={subject}>{subject} ({subjectNames[subject] || subject})</option>
+                                    ))}
                                   </select>
                                 </div>
                               </div>
@@ -1724,7 +1773,7 @@ const SubadminTestSeries = () => {
                   ) : (
                     <Save size={18} />
                   )}
-                  Save All Changes
+                  Save Changes
                 </Button>
                 <Button
                   onClick={() => setExpandedSeries(null)}

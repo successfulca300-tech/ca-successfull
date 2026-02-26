@@ -6,8 +6,15 @@ export const getFixedManagedSeries = async (req, res) => {
     const { fixedId } = req.params;
     if (!fixedId) return res.status(400).json({ success: false, message: 'Invalid fixed id' });
 
-    const seriesType = String(fixedId || '').toUpperCase(); // e.g., 's1' -> 'S1'
-    const series = await TestSeries.findOne({ seriesType });
+    // First try to find a managed TestSeries by fixedKey (case-insensitive)
+    let series = await TestSeries.findOne({ fixedKey: { $regex: `^${fixedId}$`, $options: 'i' } });
+    if (series) return res.json({ success: true, testSeries: series });
+
+    // Fallback: if fixedId includes prefix like 'inter-s1', extract series type part
+    const parts = String(fixedId || '').split('-').filter(Boolean);
+    const seriesTypePart = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+    const seriesType = String(seriesTypePart || '').toUpperCase(); // e.g., 's1' -> 'S1'
+    series = await TestSeries.findOne({ seriesType });
     if (!series) return res.json({ success: true, testSeries: null });
 
     return res.json({ success: true, testSeries: series });
@@ -23,13 +30,27 @@ export const upsertFixedTestSeries = async (req, res) => {
     const { fixedId } = req.params;
     if (!fixedId) return res.status(400).json({ success: false, message: 'Invalid fixed id' });
 
-    const seriesType = String(fixedId || '').toUpperCase();
     const body = req.body || {};
 
-    let testSeries = await TestSeries.findOne({ seriesType });
+    // Try to find by fixedKey first (supports 'inter-s1'), else by seriesType
+    let testSeries = await TestSeries.findOne({ fixedKey: { $regex: `^${fixedId}$`, $options: 'i' } });
+    if (!testSeries) {
+      const parts = String(fixedId || '').split('-').filter(Boolean);
+      const seriesTypePart = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+      const seriesType = String(seriesTypePart || '').toUpperCase();
+      testSeries = await TestSeries.findOne({ seriesType });
+    }
 
     if (!testSeries) {
+      // Determine seriesType for creation (last segment of fixedId)
+      const parts = String(fixedId || '').split('-').filter(Boolean);
+      const seriesTypePart = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+      const seriesType = String(seriesTypePart || '').toUpperCase();
+      // Derive examLevel from fixedId prefix
+      const derivedExamLevel = String(fixedId || '').toLowerCase().startsWith('inter-') ? 'inter' : 'final';
+
       testSeries = new TestSeries({
+        fixedKey: fixedId,
         seriesType,
         seriesTypeLabel: body.seriesTypeLabel || undefined,
         title: body.title || body.cardTitle || `Series ${seriesType}`,
@@ -51,6 +72,7 @@ export const upsertFixedTestSeries = async (req, res) => {
         createdBy: req.user?._id,
         publishStatus: 'published',
         isActive: body.isActive !== undefined ? body.isActive : true,
+        examLevel: body.examLevel || derivedExamLevel,
       });
     } else {
       const updatables = [
@@ -61,6 +83,8 @@ export const upsertFixedTestSeries = async (req, res) => {
       updatables.forEach((key) => {
         if (body[key] !== undefined) testSeries[key] = body[key];
       });
+      // Ensure fixedKey remains set for prefixed fixed entries
+      if (!testSeries.fixedKey) testSeries.fixedKey = fixedId;
       testSeries.publishStatus = 'published';
       if (body.isActive !== undefined) testSeries.isActive = body.isActive;
       if (body.disclaimer !== undefined) testSeries.disclaimer = body.disclaimer;

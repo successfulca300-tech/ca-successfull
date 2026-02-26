@@ -41,8 +41,10 @@ import UsersManager from "./pages/admin/UsersManager";
 import ResourcesManager from "./pages/admin/ResourcesManager";
 import AdminSettings from "./pages/admin/AdminSettings";
 import SubadminTestSeries from "./pages/SubadminTestSeries";
+import SubadminTestSeriesInter from "./pages/SubadminTestSeriesInter";
 import NotFound from "./pages/NotFound";
 import CaInter from "./pages/CaInter";
+import TestSeriesInter from "./pages/TestSeriesInter";
 
 const queryClient = new QueryClient();
 
@@ -64,7 +66,7 @@ const App = () => (
           <Route path="/mentorship-details/:enrollmentId" element={<ProtectedRoute><MentorshipDetails /></ProtectedRoute>} />
           <Route path="/resource/:resourceId" element={<ResourceDetail />} />
           <Route path="/test-series" element={<TestSeries />} />
-          <Route path="/test-series/ca-inter" element={<CaInter />} />
+          <Route path="/test-series/ca-inter" element={<TestSeriesInter />} />
           <Route path="/testseries/:id" element={<TestSeriesDetail />} />
           <Route path="/testseries/:id/content" element={<ProtectedRoute><TestSeriesContent /></ProtectedRoute>} />
           <Route path="/books" element={<Books />} />
@@ -93,6 +95,7 @@ const App = () => (
           <Route path="/admin/users" element={<ProtectedRoute requiredRole="admin"><UsersManager /></ProtectedRoute>} />
           <Route path="/subadmin" element={<ProtectedRoute requiredRole="subadmin"><SubAdminDashboard /></ProtectedRoute>} />
           <Route path="/subadmin/test-series" element={<ProtectedRoute requiredRole="subadmin"><SubadminTestSeries /></ProtectedRoute>} />
+          <Route path="/subadmin/test-series/inter" element={<ProtectedRoute requiredRole="subadmin"><SubadminTestSeriesInter /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TooltipProvider>

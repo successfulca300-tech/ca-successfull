@@ -645,17 +645,15 @@ const SubAdminTestSeriesNew = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-2">Subject</label>
-                        <select
-                          value={paperData.subject}
-                          onChange={(e) => setPaperData({ ...paperData, subject: e.target.value })}
-                          className="w-full p-2 border rounded"
-                        >
-                          <option value="FR">FR</option>
-                          <option value="AFM">AFM</option>
-                          <option value="Audit">Audit</option>
-                          <option value="DT">DT</option>
-                          <option value="IDT">IDT</option>
-                        </select>
+                          <select
+                            value={paperData.subject}
+                            onChange={(e) => setPaperData({ ...paperData, subject: e.target.value })}
+                            className="w-full p-2 border rounded"
+                          >
+                            {(seriesList.find(s => s._id === paperData.testSeriesId)?.subjects || ['FR','AFM','Audit','DT','IDT']).map((sub) => (
+                              <option key={sub} value={sub}>{sub}</option>
+                            ))}
+                          </select>
                       </div>
                     </div>
 
@@ -703,9 +701,13 @@ const SubAdminTestSeriesNew = () => {
                           onChange={(e) => setPaperData({ ...paperData, series: e.target.value })}
                           className="w-full p-2 border rounded"
                         >
-                          <option value="series1">Series 1</option>
-                          <option value="series2">Series 2</option>
-                          <option value="series3">Series 3</option>
+                          {(() => {
+                            const s = seriesList.find(x => x._id === paperData.testSeriesId);
+                            const seriesCount = s?.pricing?.seriesCount || (s && s._id && String(s._id).startsWith('inter-') ? 2 : 3);
+                            return Array.from({ length: seriesCount }, (_, i) => `series${i+1}`).map((ser) => (
+                              <option key={ser} value={ser}>{ser.replace('series', 'Series ')}</option>
+                            ));
+                          })()}
                         </select>
                       </div>
                     )}

@@ -41,6 +41,7 @@ const TestSeriesDetail = () => {
   const [computedPrice, setComputedPrice] = useState<number | null>(null);
   const [basePrice, setBasePrice] = useState<number>(0);
   const [totalPapers, setTotalPapers] = useState<number>(0);
+  const [pricingBreakdown, setPricingBreakdown] = useState<any>(null);
   const [discountInput, setDiscountInput] = useState<string>('');
   const [appliedDiscount, setAppliedDiscount] = useState<null | { code: string; type: 'flat' | 'percent'; value: number; label?: string }>(null);
   const [seriesMode, setSeriesMode] = useState<'Scheduled' | 'Unscheduled'>('Scheduled');
@@ -140,9 +141,40 @@ const TestSeriesDetail = () => {
     }
   }, [baseSeries]);
 
+  // Detect if this is CA Inter or CA Final
+  const isCAInter = id?.startsWith('inter-') || false;
+
+  // Determine how many series this S1 has (managed override > base data > defaults)
+  const getSeriesCount = () => {
+    if (!baseSeries) return 0;
+    const managedCount = managedData?.pricing?.seriesCount || managedData?.seriesCount;
+    if (managedCount && Number(managedCount) > 0) return Number(managedCount);
+    const baseCount = baseSeries?.pricing?.seriesCount || baseSeries?.seriesCount;
+    if (baseCount && Number(baseCount) > 0) return Number(baseCount);
+    // Defaults: Inter S1 uses 2, Final S1 uses 3
+    return isCAInter ? 2 : (baseSeries.seriesType === 'S1' ? 3 : 0);
+  };
+  const seriesCount = getSeriesCount();
+
   // Default overview texts per series (user-provided)
   const SERIES_OVERVIEWS: Record<string, string> = {
-    S2: `50% Syllabus Test Series
+    S2: isCAInter ? `50% Syllabus Test Series (CA Inter)
+
+Focused 50% syllabus coverage for CA Inter
+
+2 Papers per subject
+
+50% + 50% syllabus coverage = 100%
+
+Helps in gradual and structured syllabus completion
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided` : `50% Syllabus Test Series
 
 Ideal for students who want to test preparation in two phases
 
@@ -159,7 +191,27 @@ Expert evaluation within 48-72 hours
 Question papers as per ICAI marking scheme
 
 Detailed answer keys provided`,
-    S4: `CA Successful Test Series
+    S4: isCAInter ? `CA Successful Specials (Inter)
+
+Designed for serious CA Inter aspirants aiming for exam success
+
+Total 8 papers per subject for multiple revisions
+
+1 Full syllabus paper (100% coverage)
+
+2 Half syllabus papers (50% + 50%)
+
+5 Chapterwise Full syllabus papers (5 Papers)
+
+Comprehensive practice for all topics
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided` : `CA Successful Test Series
 
 Designed for serious CA aspirants aiming for exam success
 
@@ -180,7 +232,21 @@ Expert evaluation within 48-72 hours
 Question papers as per ICAI marking scheme
 
 Detailed answer keys provided`,
-    S1: `Full Syllabus Test Series
+    S1: isCAInter ? `Full Syllabus Test Series (CA Inter)
+
+Full-length exam-oriented question papers
+
+Available in Series 1 & Series 2
+
+Helps in real exam time management practice
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided` : `Full Syllabus Test Series
 
 Best suited for students who have completed the syllabus
 
@@ -197,7 +263,23 @@ Expert evaluation within 48-72 hours
 Question papers as per ICAI marking scheme
 
 Detailed answer keys provided`,
-    S3: `30% Syllabus Test Series
+    S3: isCAInter ? `Chapterwise Test Series (CA Inter)
+
+Chapterwise practice divided into manageable parts
+
+5 Papers per subject
+
+Chapter-by-chapter coverage enabling concept clarity
+
+Perfect for topic-wise and chapter-wise preparation
+
+Enroll subject-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided` : `30% Syllabus Test Series
 
 Perfect for early-stage CA preparation
 
@@ -220,7 +302,7 @@ Detailed answer keys provided`,
 
   // Default disclaimer texts per series (user-provided)
   const SERIES_DISCLAIMERS: Record<string, string> = {
-    S1: `This test series is designed specifically for CA Final exam preparation.
+    S1: `This test series is designed specifically for CA exam preparation.
 
 Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
 
@@ -229,7 +311,7 @@ All enrollments are confirmed upon purchase and are non-refundable.
 Technical assistance will be available during standard business hours to ensure a smooth experience.
 
 By enrolling in the test series, students are agree to our terms and conditions.`,
-    S2: `This test series is designed specifically for CA Final exam preparation.
+    S2: `This test series is designed specifically for CA exam preparation.
 
 Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
 
@@ -238,7 +320,7 @@ All enrollments are confirmed upon purchase and are non-refundable.
 Technical assistance will be available during standard business hours to ensure a smooth experience.
 
 By enrolling in the test series, students are agree to our terms and conditions.`,
-    S3: `This test series is designed specifically for CA Final exam preparation.
+    S3: `This test series is designed specifically for CA exam preparation.
 
 Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
 
@@ -247,7 +329,7 @@ All enrollments are confirmed upon purchase and are non-refundable.
 Technical assistance will be available during standard business hours to ensure a smooth experience.
 
 By enrolling in the test series, students are agree to our terms and conditions.`,
-    S4: `This test series is designed specifically for CA Final exam preparation.
+    S4: `This test series is designed specifically for CA exam preparation.
 
 Access to the test series will be provided as per the schedule and plan selected at the time of enrollment.
 
@@ -267,7 +349,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
       return;
     }
 
-    // For S1, require at least one series selection
+    // For S1 (both CA Final and CA Inter), require at least one series selection
     if (baseSeries.seriesType === 'S1' && selectedSeries.length === 0) {
       setComputedPrice(null);
       setBasePrice(0);
@@ -293,10 +375,11 @@ By enrolling in the test series, students are agree to our terms and conditions.
         );
 
         if (response?.success && response.pricing) {
-          const pricing = response.pricing as { basePrice: number; totalPapers: number; finalPrice: number };
+          const pricing = response.pricing as any;
           setBasePrice(pricing.basePrice || 0);
           setTotalPapers(pricing.totalPapers || 0);
           setComputedPrice(pricing.finalPrice || 0);
+          setPricingBreakdown(pricing.breakdown || null);
         }
       } catch (error) {
         console.error('Error calculating price:', error);
@@ -305,7 +388,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
     };
 
     fetchPricing();
-  }, [baseSeries, selectedSeries, selectedSubjects, appliedDiscount, id]);
+  }, [baseSeries, selectedSeries, selectedSubjects, appliedDiscount, id, isCAInter]);
 
   // Fetch uploaded papers for this test series
   useEffect(() => {
@@ -334,15 +417,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
 
   const handleApplyDiscount = async () => {
     if (!baseSeries) return;
-    // Enforce series-specific discount rules
-    if (baseSeries.seriesType === 'S1' && totalPapers <= 2) {
-      toast.error('Apply only when you select more than 2 papers');
-      return;
-    }
-    if ((baseSeries.seriesType === 'S2' || baseSeries.seriesType === 'S3') && selectedSubjects.length <= 2) {
-      toast.error('Apply only when you select more than 2 subjects');
-      return;
-    }
+    // Allow coupon application for any valid selection (including single subject/paper)
 
     const code = (discountInput || '').trim();
     if (!code) {
@@ -494,6 +569,17 @@ By enrolling in the test series, students are agree to our terms and conditions.
   const isSubadmin = userObj?.role === 'subadmin';
   const showSeriesSelection = baseSeries?.seriesType === 'S1';
 
+  // Derive groups from subjects when `baseSeries.groups` is not provided
+  const derivedGroups = (() => {
+    const subs = baseSeries?.subjects || [];
+    if (!subs || subs.length === 0) return null;
+    // Default split: first 3 subjects -> Group 1, remaining -> Group 2
+    const group1 = subs.slice(0, 3);
+    const group2 = subs.slice(3);
+    return { group1, group2 };
+  })();
+  const groupsToUse = baseSeries?.groups || derivedGroups;
+
   // Handler for video upload
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -582,7 +668,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
             <div className="lg:col-span-2 bg-card rounded-xl border border-border p-6 space-y-6">
               <h2 className="text-2xl font-bold">Selection Flow</h2>
 
-              {/* Series Selection - ONLY FOR S1 */}
+              {/* Series Selection - FOR S1 (Both CA Final AND CA Inter) */}
               {baseSeries?.seriesType === 'S1' && (
                 <div>
                   <label className="block text-sm font-semibold mb-3">
@@ -590,27 +676,52 @@ By enrolling in the test series, students are agree to our terms and conditions.
                     Select Series (Multiple)
                   </label>
                   <div className="space-y-2">
-                    {[
-                      { id: 'series1', label: 'Series 1' },
-                      { id: 'series2', label: 'Series 2' },
-                      { id: 'series3', label: 'Series 3' },
-                    ].map((s) => (
-                      <label key={s.id} className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-secondary/50 transition">
-                        <input
-                          type="checkbox"
-                          checked={selectedSeries.includes(s.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedSeries([...selectedSeries, s.id]);
-                            } else {
-                              setSelectedSeries(selectedSeries.filter(x => x !== s.id));
-                            }
-                          }}
-                          className="w-5 h-5 rounded border-2 border-primary cursor-pointer"
-                        />
-                        <span className="font-medium">{s.label}</span>
-                      </label>
-                    ))}
+                    {isCAInter ? (
+                      // Inter has Series 1, Series 2
+                      [
+                        { id: 'series1', label: 'Series 1' },
+                        { id: 'series2', label: 'Series 2' },
+                      ].map((s) => (
+                        <label key={s.id} className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-secondary/50 transition">
+                          <input
+                            type="checkbox"
+                            checked={selectedSeries.includes(s.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedSeries([...selectedSeries, s.id]);
+                              } else {
+                                setSelectedSeries(selectedSeries.filter(x => x !== s.id));
+                              }
+                            }}
+                            className="w-5 h-5 rounded border-2 border-primary cursor-pointer"
+                          />
+                          <span className="font-medium">{s.label}</span>
+                        </label>
+                      ))
+                    ) : (
+                      // Final has Series 1, Series 2, Series 3
+                      [
+                        { id: 'series1', label: 'Series 1' },
+                        { id: 'series2', label: 'Series 2' },
+                        { id: 'series3', label: 'Series 3' },
+                      ].map((s) => (
+                        <label key={s.id} className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-secondary/50 transition">
+                          <input
+                            type="checkbox"
+                            checked={selectedSeries.includes(s.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedSeries([...selectedSeries, s.id]);
+                              } else {
+                                setSelectedSeries(selectedSeries.filter(x => x !== s.id));
+                              }
+                            }}
+                            className="w-5 h-5 rounded border-2 border-primary cursor-pointer"
+                          />
+                          <span className="font-medium">{s.label}</span>
+                        </label>
+                      ))
+                    )}
                   </div>
                   {selectedSeries.length === 0 && (
                     <p className="text-xs text-yellow-600 mt-2">⚠️ Select at least one series to continue</p>
@@ -618,41 +729,45 @@ By enrolling in the test series, students are agree to our terms and conditions.
                 </div>
               )}
 
-              {/* Group Selection */}
-              <div>
-                <label className="block text-sm font-semibold mb-3">
-                  <span className="inline-block w-6 h-6 rounded-full bg-primary text-primary-foreground text-center text-xs font-bold mr-2">{baseSeries?.seriesType === 'S1' ? '2' : '1'}</span>
-                  Select Group (Single)
-                </label>
-                <div className="flex gap-3 flex-wrap">
-                  {[{v:'Group 1',l:'Group 1'},{v:'Group 2',l:'Group 2'},{v:'Both',l:'Both Groups'}].map((g) => (
-                    <button
-                      key={g.v}
-                      onClick={() => {
-                        setSelectedGroup(g.v);
-                        if (g.v === 'Group 1') setSelectedSubjects(['FR', 'AFM', 'Audit']);
-                        else if (g.v === 'Group 2') setSelectedSubjects(['DT', 'IDT']);
-                        else setSelectedSubjects(['FR', 'AFM', 'Audit', 'DT', 'IDT']);
-                      }}
-                      disabled={baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false}
-                      className={`px-4 py-2 rounded-lg border-2 font-medium transition ${
-                        (baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false)
-                          ? 'opacity-50 cursor-not-allowed border-border bg-card'
-                          : selectedGroup === g.v
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-card hover:border-primary/50'
-                      }`}
-                    >
-                      {g.l}
-                    </button>
-                  ))}
+              {/* Group Selection - Available for both CA Final and CA Inter */}
+              {groupsToUse && (
+                <div>
+                  <label className="block text-sm font-semibold mb-3">
+                    <span className="inline-block w-6 h-6 rounded-full bg-primary text-primary-foreground text-center text-xs font-bold mr-2">{baseSeries?.seriesType === 'S1' ? '2' : '1'}</span>
+                    Select Group (Single)
+                  </label>
+                  <div className="flex gap-3 flex-wrap">
+                    {[
+                      {v:'Group 1',l:'Group 1', subjects: groupsToUse.group1 || []},
+                      {v:'Group 2',l:'Group 2', subjects: groupsToUse.group2 || []},
+                      {v:'Both',l:'Both Groups', subjects: baseSeries.subjects || []}
+                    ].map((g) => (
+                      <button
+                        key={g.v}
+                        onClick={() => {
+                          setSelectedGroup(g.v);
+                          setSelectedSubjects(g.subjects);
+                        }}
+                        disabled={baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false}
+                        className={`px-4 py-2 rounded-lg border-2 font-medium transition ${
+                          (baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false)
+                            ? 'opacity-50 cursor-not-allowed border-border bg-card'
+                            : selectedGroup === g.v
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-card hover:border-primary/50'
+                        }`}
+                      >
+                        {g.l}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Subject Selection */}
               <div>
                 <label className="block text-sm font-semibold mb-3">
-                  <span className="inline-block w-6 h-6 rounded-full bg-primary text-primary-foreground text-center text-xs font-bold mr-2">{baseSeries?.seriesType === 'S1' ? '3' : '2'}</span>
+                  <span className="inline-block w-6 h-6 rounded-full bg-primary text-primary-foreground text-center text-xs font-bold mr-2">{baseSeries?.seriesType === 'S1' && baseSeries?.groups ? '3' : baseSeries?.seriesType === 'S1' && !baseSeries?.groups ? '2' : '1'}</span>
                   Select Subjects (Multiple)
                 </label>
                 <div className="flex gap-2 flex-wrap">
@@ -686,14 +801,18 @@ By enrolling in the test series, students are agree to our terms and conditions.
             <div className="bg-primary/5 rounded-xl border border-primary/20 p-6 h-fit">
               <h3 className="text-lg font-bold mb-4">📋 Order Summary</h3>
               <div className="space-y-3 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Selected Series</p>
-                  <p className="font-semibold">{selectedSeries.length > 0 ? `${selectedSeries.length} series` : '—'}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Selected Group</p>
-                  <p className="font-semibold">{selectedGroup || '—'}</p>
-                </div>
+                {baseSeries?.seriesType === 'S1' && (
+                  <div>
+                    <p className="text-muted-foreground">Selected Series</p>
+                    <p className="font-semibold">{selectedSeries.length > 0 ? `${selectedSeries.length} series` : '—'}</p>
+                  </div>
+                )}
+                {groupsToUse && (
+                  <div>
+                    <p className="text-muted-foreground">Selected Group</p>
+                    <p className="font-semibold">{selectedGroup || '—'}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-muted-foreground">Selected Subjects</p>
                   <p className="font-semibold">{selectedSubjects.length > 0 ? selectedSubjects.join(', ') : '—'}</p>
@@ -702,6 +821,28 @@ By enrolling in the test series, students are agree to our terms and conditions.
                   <div>
                     <p className="text-muted-foreground">Total Papers</p>
                     <p className="font-semibold">{totalPapers}</p>
+                  </div>
+                )}
+                {/* subject-wise breakdown */}
+                {selectedSubjects.length > 0 && pricingBreakdown && (
+                  <div>
+                    <p className="text-muted-foreground">Subject-wise Breakdown</p>
+                    <ul className="list-disc ml-6 text-xs">
+                      {selectedSubjects.map((sub) => {
+                        const papers =
+                          (pricingBreakdown && pricingBreakdown.papersPerSubject)
+                            ? pricingBreakdown.papersPerSubject
+                            : baseSeries?.papersPerSubject
+                              ? baseSeries.papersPerSubject[sub] || 0
+                              : 0;
+                        const pricePer = pricingBreakdown.pricePerSubject || 0;
+                        return (
+                          <li key={sub} className="mt-1">
+                            {sub}: {papers} paper{papers !== 1 && 's'} • ₹{pricePer.toLocaleString()}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
                 )}
                 
@@ -736,9 +877,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
                         <Button
                           onClick={handleApplyDiscount}
                           disabled={
-                            (baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false) ||
-                            (baseSeries?.seriesType === 'S1' && totalPapers <= 2) ||
-                            ((baseSeries?.seriesType === 'S2' || baseSeries?.seriesType === 'S3') && selectedSubjects.length <= 2)
+                            (baseSeries?.seriesType === 'S1' ? selectedSeries.length === 0 : false)
                           }
                           className="text-sm"
                         >
@@ -748,12 +887,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
                     {appliedDiscount && (
                       <p className="text-sm text-green-600 mt-2">✓ {appliedDiscount.label || appliedDiscount.code} applied</p>
                     )}
-                      {baseSeries?.seriesType === 'S1' && totalPapers <= 2 && (
-                        <p className="text-sm text-orange-600 mt-2">⚠️ Apply only when you select more than 2 papers</p>
-                      )}
-                      {(baseSeries?.seriesType === 'S2' || baseSeries?.seriesType === 'S3') && selectedSubjects.length <= 2 && (
-                        <p className="text-sm text-orange-600 mt-2">⚠️ Apply only when you select more than 2 subjects</p>
-                      )}
+                      {/* No minimum-subject restriction; coupons can be applied for single subject/paper purchases */}
                   </div>
 
                 </div>
@@ -823,13 +957,15 @@ By enrolling in the test series, students are agree to our terms and conditions.
                       <p className="font-semibold">Uploaded from {formatDate(series.seriesDates?.series2UploadDate)}</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
-                    <div>
-                      <p className="text-sm text-muted-foreground font-medium">Series 3</p>
-                      <p className="font-semibold">Uploaded from {formatDate(series.seriesDates?.series3UploadDate)}</p>
+                  {seriesCount >= 3 && (
+                    <div className="flex items-start gap-3">
+                      <Truck className="text-primary flex-shrink-0 mt-1" size={24} />
+                      <div>
+                        <p className="text-sm text-muted-foreground font-medium">Series 3</p>
+                        <p className="font-semibold">Uploaded from {formatDate(series.seriesDates?.series3UploadDate)}</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div className="border-t border-border pt-3 mt-3 flex items-start gap-3">
                     <Clock className="text-primary flex-shrink-0 mt-1" size={24} />
                     <div>
@@ -844,7 +980,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
           )}
 
           {/* 3. Test Series Schedule - Subject-wise Dates Table */}
-          {baseSeries.seriesType === 'S1' && series?.subjectDateSchedule && series.subjectDateSchedule.length > 0 && (
+          {baseSeries.seriesType === 'S1' && ( (series?.subjectDateSchedule && series.subjectDateSchedule.length > 0) || (baseSeries.subjects && baseSeries.subjects.length > 0) ) && (
             <div className="mb-8 rounded-xl border border-border bg-card p-6 md:p-8">
               <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
                 <span className="text-2xl">📅</span>
@@ -857,18 +993,26 @@ By enrolling in the test series, students are agree to our terms and conditions.
                       <th className="px-4 py-3 text-left font-semibold">Subject</th>
                       <th className="px-4 py-3 text-left font-semibold">Series 1</th>
                       <th className="px-4 py-3 text-left font-semibold">Series 2</th>
-                      <th className="px-4 py-3 text-left font-semibold">Series 3</th>
+                      {seriesCount >= 3 && <th className="px-4 py-3 text-left font-semibold">Series 3</th>}
                     </tr>
                   </thead>
                   <tbody className="bg-slate-950 text-white">
-                    {series.subjectDateSchedule.map((row: any, index: number) => (
-                      <tr key={index} className="border-t border-white/10">
-                        <td className="px-4 py-3 font-semibold">{row.subject || '-'}</td>
-                        <td className="px-4 py-3">{formatDate(row.series1Date)}</td>
-                        <td className="px-4 py-3">{formatDate(row.series2Date)}</td>
-                        <td className="px-4 py-3">{formatDate(row.series3Date)}</td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      const availableSubjects = baseSeries.subjects || [];
+                      const schedule = series.subjectDateSchedule && series.subjectDateSchedule.length > 0 ? series.subjectDateSchedule : [];
+                      const merged = availableSubjects.map((sub) => {
+                        const found = schedule.find((r: any) => r.subject === sub);
+                        return found || { subject: sub, series1Date: '', series2Date: '', series3Date: '' };
+                      });
+                      return merged.map((row: any, index: number) => (
+                        <tr key={index} className="border-t border-white/10">
+                          <td className="px-4 py-3 font-semibold">{row.subject || '-'}</td>
+                          <td className="px-4 py-3">{formatDate(row.series1Date)}</td>
+                          <td className="px-4 py-3">{formatDate(row.series2Date)}</td>
+                          {seriesCount >= 3 && <td className="px-4 py-3">{formatDate(row.series3Date)}</td>}
+                        </tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
