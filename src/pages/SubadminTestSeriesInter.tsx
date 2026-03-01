@@ -387,8 +387,8 @@ const SubadminTestSeriesInter = () => {
 
   return (
     <Layout>
-      <div className="container mx-auto py-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
           <h1 className="text-2xl font-semibold">Test Series Management — CA Inter</h1>
           <div>
             <Button onClick={() => navigate('/subadmin')}>Back</Button>
@@ -399,8 +399,8 @@ const SubadminTestSeriesInter = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-6">
-          <div className="col-span-1">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-1">
             <Card>
               <CardHeader>
                 <CardTitle>Series</CardTitle>
@@ -418,7 +418,7 @@ const SubadminTestSeriesInter = () => {
             </Card>
           </div>
 
-          <div className="col-span-3">
+          <div className="lg:col-span-3">
             <Card>
               <CardHeader>
                 <CardTitle>{getAllSeries().find(s=>s._id===activeTab)?.title||'Series'}</CardTitle>

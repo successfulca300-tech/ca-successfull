@@ -576,12 +576,20 @@ const AdminDashboard = () => {
 
   const handleExportUsers = () => {
     try {
+      const formatEnrollmentForExport = (user: any) => {
+        if (!user?.isEnrolled) return 'Not Enrolled';
+        if (Array.isArray(user.enrollmentDetails) && user.enrollmentDetails.length > 0) {
+          return user.enrollmentDetails.join(' | ');
+        }
+        return user.enrollmentNames || user.enrollmentName || 'Enrolled';
+      };
+
       // Prepare data for export
       const exportData = users.map((user) => ({
         Name: user.name || '',
         Email: user.email || '',
         'Phone Number': user.phone || '',
-        'Enrollment Status': user.isEnrolled ? (user.enrollmentNames || user.enrollmentName || 'Enrolled') : 'Not Enrolled',
+        'Enrollment Status': formatEnrollmentForExport(user),
       }));
 
       // Create worksheet
@@ -651,8 +659,8 @@ const AdminDashboard = () => {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Sidebar */}
-            <div className="lg:col-span-1">
-              <div className="bg-card rounded-xl shadow-lg border border-border overflow-hidden sticky top-4">
+              <div className="lg:col-span-1">
+	              <div className="bg-card rounded-xl shadow-lg border border-border overflow-hidden lg:sticky lg:top-4">
                 {menuItems.map((item) => (
                   <button
                     key={item.id}
@@ -951,13 +959,27 @@ const AdminDashboard = () => {
                           <TableCell>{u.name}</TableCell>
                           <TableCell>{u.email}</TableCell>
                           <TableCell>{u.phone || 'N/A'}</TableCell>
-                          <TableCell>
-                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                              u.isEnrolled ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'
-                            }`}>
-                              {u.isEnrolled ? (u.enrollmentNames || u.enrollmentName || 'Enrolled') : 'Not Enrolled in any course'}
-                            </span>
-                          </TableCell>
+	                          <TableCell>
+	                            {u.isEnrolled ? (
+	                              <div className="space-y-1">
+	                                {(Array.isArray(u.enrollmentDetails) && u.enrollmentDetails.length > 0
+	                                  ? u.enrollmentDetails
+	                                  : [u.enrollmentNames || u.enrollmentName || 'Enrolled']
+	                                ).map((entry: string, idx: number) => (
+	                                  <div
+	                                    key={`${u._id || u.id}-enrollment-${idx}`}
+	                                    className="inline-block mr-2 mb-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-500 text-white"
+	                                  >
+	                                    {entry}
+	                                  </div>
+	                                ))}
+	                              </div>
+	                            ) : (
+	                              <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-red-500 text-white">
+	                                Not Enrolled in any course
+	                              </span>
+	                            )}
+	                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

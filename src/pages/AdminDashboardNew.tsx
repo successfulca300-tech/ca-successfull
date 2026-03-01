@@ -218,7 +218,7 @@ export default function AdminDashboardPage() {
             <CardTitle>Quick Navigation</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <Button variant="outline" onClick={() => navigate('/admin/courses')}>
                 <BookOpen className="mr-2 h-4 w-4" />
                 Manage Courses

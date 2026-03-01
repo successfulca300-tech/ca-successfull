@@ -10,6 +10,55 @@ import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 
+const SERIES_TYPE_LABELS = {
+  S1: 'Full Syllabus',
+  S2: '50% Syllabus',
+  S3: '30% Syllabus',
+  S4: 'CA Successful Specials',
+  'inter-s1': 'Full Syllabus (Inter)',
+  'inter-s2': '50% Syllabus (Inter)',
+  'inter-s3': 'Chapterwise (Inter)',
+  'inter-s4': 'CA Successful Specials (Inter)',
+  s1: 'Full Syllabus',
+  s2: '50% Syllabus',
+  s3: '30% Syllabus',
+  s4: 'CA Successful Specials',
+};
+
+const normalizePurchasedSubjects = (subjects = []) => {
+  if (!Array.isArray(subjects)) return [];
+  const seen = new Set();
+  const normalized = [];
+
+  for (const raw of subjects) {
+    if (!raw) continue;
+    const val = String(raw).trim();
+    if (!val) continue;
+    const parts = val.split('-');
+    const subject = (parts[parts.length - 1] || '').trim();
+    if (!subject) continue;
+    const key = subject.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      normalized.push(subject);
+    }
+  }
+
+  return normalized;
+};
+
+const resolveSeriesDisplayName = (seriesDoc, fallbackIdOrName) => {
+  if (seriesDoc?.seriesTypeLabel) return seriesDoc.seriesTypeLabel;
+  if (seriesDoc?.seriesType && SERIES_TYPE_LABELS[seriesDoc.seriesType]) {
+    return SERIES_TYPE_LABELS[seriesDoc.seriesType];
+  }
+  if (seriesDoc?.title) return seriesDoc.title;
+
+  const fallback = String(fallbackIdOrName || '').trim();
+  if (!fallback) return 'Test Series';
+  return SERIES_TYPE_LABELS[fallback] || fallback;
+};
+
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Private/Admin
@@ -98,22 +147,32 @@ export const getUsers = async (req, res) => {
             } else if (en.testSeriesId) {
               // testSeriesId may be ObjectId or shorthand string
               let tsName = String(en.testSeriesId);
+              let tsDoc = null;
               try {
                 if (typeof en.testSeriesId === 'object' && en.testSeriesId._id) {
-                  const ts = await TestSeries.findById(en.testSeriesId._id).select('title seriesType seriesTypeLabel');
-                  tsName = ts ? (ts.title || ts.seriesTypeLabel || ts.seriesType) : tsName;
+                  tsDoc = await TestSeries.findById(en.testSeriesId._id).select('title seriesType seriesTypeLabel');
                 } else if (typeof en.testSeriesId === 'string') {
-                  let ts = null;
-                  try { ts = await TestSeries.findById(en.testSeriesId).select('title seriesTypeLabel seriesType'); } catch(_) { ts = null; }
-                  if (!ts) {
-                    try { ts = await TestSeries.findOne({ seriesType: en.testSeriesId }).select('title seriesTypeLabel seriesType'); } catch(_) { ts = null; }
+                  try { tsDoc = await TestSeries.findById(en.testSeriesId).select('title seriesTypeLabel seriesType'); } catch(_) { tsDoc = null; }
+                  if (!tsDoc) {
+                    try { tsDoc = await TestSeries.findOne({ seriesType: en.testSeriesId }).select('title seriesTypeLabel seriesType'); } catch(_) { tsDoc = null; }
                   }
-                  tsName = ts ? (ts.title || ts.seriesTypeLabel || ts.seriesType) : tsName;
                 }
               } catch (e) {
                 /* fallback to string id */
               }
-              enrollmentList.push({ type: 'testseries', name: tsName });
+              tsName = resolveSeriesDisplayName(tsDoc, en.testSeriesId);
+
+              const selectedSubjects = normalizePurchasedSubjects(en.purchasedSubjects);
+              const seriesWithSubjects = selectedSubjects.length > 0
+                ? `${tsName} (${selectedSubjects.join(', ')})`
+                : tsName;
+
+              enrollmentList.push({
+                type: 'testseries',
+                name: seriesWithSubjects,
+                baseName: tsName,
+                subjects: selectedSubjects,
+              });
             } else if (en.mentorshipId) {
               const mentorshipPlanTitles = {
                 mentorship_basic_01: 'Basic Mentorship Plan',
@@ -128,12 +187,14 @@ export const getUsers = async (req, res) => {
         }
 
         const enrollmentNames = enrollmentList.map(e => e.name).join(', ');
+        const enrollmentDetails = enrollmentList.map(e => e.name);
 
         return {
           ...user.toObject(),
           isEnrolled: enrollmentList.length > 0,
           enrollmentList,
           enrollmentNames,
+          enrollmentDetails,
         };
       })
     );

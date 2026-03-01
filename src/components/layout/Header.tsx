@@ -30,6 +30,7 @@ const Header = () => {
   ];
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileExpandedItem, setMobileExpandedItem] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
@@ -96,13 +97,13 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50">
       {/* Top Bar */}
-      <div className="bg-primary text-primary-foreground py-2">
+      <div className="hidden sm:block bg-primary text-primary-foreground py-2">
         <div className="container mx-auto px-4 flex justify-between items-center text-sm">
-          <div className="flex gap-6">
+          <div className="flex gap-4 lg:gap-6">
             <Link to="/about" className="hover:underline">ABOUT US</Link>
             <Link to="/contact" className="hover:underline">CONTACT US</Link>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-3 lg:gap-4">
             <a href="https://youtube.com/@casuccessful?si=N6WIjOIt9qb5morZ" target="_blank" className="hover:opacity-80"><Youtube size={18} /></a>
             <a href="https://t.me/CASuccessful" target="_blank"  className="hover:opacity-80"><Send size={18} /></a>
             {/* <a href="#" className="hover:opacity-80"><Phone size={18} /></a> */}
@@ -118,7 +119,7 @@ const Header = () => {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex-shrink-0">
-              <img src={logo} alt="CA Successful" className="h-16 object-contain" />
+              <img src={logo} alt="CA Successful" className="h-12 sm:h-16 object-contain" />
             </Link>
 
             {/* Desktop Navigation */}
@@ -174,7 +175,7 @@ const Header = () => {
             </div>
 
             {/* Right Side */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               {/* Show cart only for logged-in regular users */}
               {user && userRole === 'user' && (
                 <Link to="/cart" className="relative">
@@ -190,7 +191,7 @@ const Header = () => {
               {user && userRole === 'user' ? (
                 <div className="relative">
                   <button
-                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
                     className="flex items-center gap-2 p-2 rounded-full hover:bg-secondary transition-colors"
                   >
                     <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
@@ -198,7 +199,7 @@ const Header = () => {
                     </div>
                   </button>
 
-                  {mobileMenuOpen && (
+                  {userMenuOpen && (
                     <div className="absolute right-0 top-full mt-2 w-48 bg-card shadow-lg rounded-lg border border-border py-2 z-50">
                       <div className="px-4 py-2 border-b border-border">
                         <p className="font-medium text-sm">{user.name}</p>
@@ -206,7 +207,7 @@ const Header = () => {
                       </div>
 
                       <button
-                        onClick={() => { navigate(getDashboardPath()); setMobileMenuOpen(false); }}
+                        onClick={() => { navigate(getDashboardPath()); setUserMenuOpen(false); }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-secondary transition-colors"
                       >
                         <LayoutDashboard size={18} />
@@ -214,7 +215,7 @@ const Header = () => {
                       </button>
 
                       <button
-                        onClick={() => { navigate('/dashboard?tab=settings'); setMobileMenuOpen(false); }}
+                        onClick={() => { navigate('/dashboard?tab=settings'); setUserMenuOpen(false); }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-secondary transition-colors"
                       >
                         <Settings size={18} />
@@ -222,7 +223,7 @@ const Header = () => {
                       </button>
 
                       <button
-                        onClick={() => { navigate('/dashboard?tab=address'); setMobileMenuOpen(false); }}
+                        onClick={() => { navigate('/dashboard?tab=address'); setUserMenuOpen(false); }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-secondary transition-colors"
                       >
                         <MapPin size={18} />
@@ -231,7 +232,7 @@ const Header = () => {
 
                       <div className="border-t border-border mt-2">
                         <button
-                          onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                          onClick={() => { handleLogout(); setUserMenuOpen(false); }}
                           className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-secondary text-destructive transition-colors"
                         >
                           <LogOut size={18} />
@@ -281,7 +282,10 @@ const Header = () => {
               {/* Mobile Menu Button */}
               <button
                 className="lg:hidden text-foreground"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                onClick={() => {
+                  setMobileMenuOpen(!mobileMenuOpen);
+                  setUserMenuOpen(false);
+                }}
               >
                 {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>

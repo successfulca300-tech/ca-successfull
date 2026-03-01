@@ -876,7 +876,7 @@ const SubAdminDashboard = () => {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Sidebar */}
             <div className="lg:col-span-1">
-              <div className="bg-card rounded-xl shadow-lg border border-border overflow-hidden sticky top-4">
+              <div className="bg-card rounded-xl shadow-lg border border-border overflow-hidden lg:sticky lg:top-4">
                 {menuItems.map((item: any) => (
                   <button
                     key={item.id}
