@@ -77,12 +77,22 @@ export const upsertFixedTestSeries = async (req, res) => {
     } else {
       const updatables = [
         'title', 'overview', 'description', 'subjects', 'pricing', 'highlights', 'syllabusBreakdown',
-        'testSchedule', 'instructions', 'seriesDates', 'papersPerSubject', 'sampleAnswerSheets',
+        'testSchedule', 'instructions', 'papersPerSubject', 'sampleAnswerSheets',
         'cardThumbnail', 'thumbnail', 'cardTitle', 'cardDescription', 'isActive', 'disclaimer', 'subjectDateSchedule', 'pricing', 'category'
       ];
       updatables.forEach((key) => {
         if (body[key] !== undefined) testSeries[key] = body[key];
       });
+      // Handle seriesDates separately: merge non-empty values to avoid accidental clearing
+      if (body.seriesDates && typeof body.seriesDates === 'object') {
+        testSeries.seriesDates = testSeries.seriesDates || {};
+        Object.keys(body.seriesDates).forEach((k) => {
+          const v = body.seriesDates[k];
+          if (v !== undefined && v !== null && String(v).trim() !== '') {
+            testSeries.seriesDates[k] = v;
+          }
+        });
+      }
       // Ensure fixedKey remains set for prefixed fixed entries
       if (!testSeries.fixedKey) testSeries.fixedKey = fixedId;
       testSeries.publishStatus = 'published';

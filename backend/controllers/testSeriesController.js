@@ -246,7 +246,7 @@ Detailed answer keys provided
     description: 'Special curated series with 8 papers per subject for CA Inter.',
     seriesType: 'S4',
     seriesTypeLabel: 'CA Successful Specials',
-    price: 1400,
+    price: 1600,
     mode: 'Online',
     group: 'Both',
     subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],
@@ -620,7 +620,16 @@ export const updateTestSeries = async (req, res) => {
     if (instructions) testSeries.instructions = instructions;
     if (sampleAnswerSheets) testSeries.sampleAnswerSheets = sampleAnswerSheets;
     if (papersPerSubject) testSeries.papersPerSubject = papersPerSubject;
-    if (seriesDates) testSeries.seriesDates = seriesDates;
+    // Merge seriesDates: only update keys with non-empty values to avoid accidental clearing
+    if (seriesDates && typeof seriesDates === 'object') {
+      testSeries.seriesDates = testSeries.seriesDates || {};
+      Object.keys(seriesDates).forEach((k) => {
+        const v = seriesDates[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+          testSeries.seriesDates[k] = v;
+        }
+      });
+    }
     if (isActive !== undefined) testSeries.isActive = isActive;
 
     const updatedTestSeries = await testSeries.save();
