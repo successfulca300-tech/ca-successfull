@@ -1,7 +1,7 @@
 // Normalize API base URL: ensure it ends with /api (no trailing slash beyond that)
 const rawApiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:5000';
 let API_URL = rawApiUrl.replace(/\/+$/g, '');
-if (!API_URL.endsWith('/api')) API_URL = API_URL + '/api';
+if (!API_URL.endsWith('/api')) API_URL += '/api';
 
 // import axios from "axios";
 
@@ -1034,7 +1034,7 @@ export const testimonialsAPI = {
 // Dashboard API (Admin only)
 export const dashboardAPI = {
   getStats: async () => {
-    return apiRequest<{ stats: any }>('/dashboard/stats');
+    return apiRequest<{ stats: any; recentEnrollments?: any[]; pendingActions?: any[] }>('/dashboard/stats');
   },
 
   getRecentEnrollments: async (limit?: number) => {

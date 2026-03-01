@@ -8,10 +8,19 @@ import { useToast } from '@/hooks/use-toast';
 import { LogOut, Users, BookOpen, Tag, Clock } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 
+interface DashboardStats {
+  totalUsers?: number;
+  totalCourses?: number;
+  activeOffers?: number;
+  pendingPublishRequests?: number;
+  recentEnrollments?: any[];
+  pendingActions?: any[];
+}
+
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentEnrollments, setRecentEnrollments] = useState<any[]>([]);
   const [pendingActions, setPendingActions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,9 +52,9 @@ export default function AdminDashboardPage() {
 
         // Fetch dashboard stats
         const statsData = await dashboardAPI.getStats();
-        setStats(statsData.stats);
-        setRecentEnrollments(statsData.recentEnrollments);
-        setPendingActions(statsData.pendingActions);
+        setStats(statsData?.stats || null);
+        setRecentEnrollments(statsData?.recentEnrollments || []);
+        setPendingActions(statsData?.pendingActions || []);
       } catch (err: any) {
         console.error('Error fetching dashboard:', err);
         setError(err.message || 'Failed to load dashboard data');

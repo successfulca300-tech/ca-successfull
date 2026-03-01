@@ -263,7 +263,7 @@ const AdminDashboard = () => {
         courseTitle: testimonial.courseTitle,
         featured: !currentFeatured
       });
-      toast.success(`Testimonial ${!currentFeatured ? 'featured' : 'unfeatured'}`);
+      toast.success(`Testimonial ${currentFeatured ? 'unfeatured' : 'featured'}`);
       fetchData();
     } catch (err) {
       console.error(err);
