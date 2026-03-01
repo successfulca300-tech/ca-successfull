@@ -25,6 +25,7 @@ type Plan = {
   tier: 'basic' | 'golden' | 'platinum';
   title: string;
   price: number;
+  originalPrice?: number;
   bestFor: string;
   features: string[];
 };
@@ -34,7 +35,8 @@ const plans: Plan[] = [
     _id: 'mentorship_basic_01',
     tier: 'basic',
     title: 'Basic Mentorship Plan',
-    price: 1499,
+    price: 1249,
+    originalPrice: 1499,
     bestFor: 'Self-driven students who need structured guidance and expert support.',
     features: [
       'Basic study planner for the respective attempt',
@@ -49,7 +51,8 @@ const plans: Plan[] = [
     _id: 'mentorship_golden_02',
     tier: 'golden',
     title: 'Golden Mentorship Plan',
-    price: 2999,
+    price: 2499,
+    originalPrice: 2999,
     bestFor: 'Students seeking personalized planning and regular academic monitoring.',
     features: [
       'All features of the Basic Mentorship Plan',
@@ -64,7 +67,8 @@ const plans: Plan[] = [
     _id: 'mentorship_platinum_03',
     tier: 'platinum',
     title: 'Platinum Mentorship Plan',
-    price: 4999,
+    price: 4499,
+    originalPrice: 4999,
     bestFor: 'Serious aspirants who want intensive, priority, and continuous mentorship.',
     features: [
       'All features of Basic and Golden Plans',
@@ -317,10 +321,22 @@ const MentorshipPage: React.FC = () => {
                   </h2>
                 </div>
                 <div className="p-6">
-                  <p className="mb-4 text-3xl font-bold text-primary">
-                    {inrFormatter.format(plan.price)}
-                    <span className="text-lg font-normal text-muted-foreground"> / Attempt</span>
-                  </p>
+                  <div className="mb-4">
+                    {plan.originalPrice ? (
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-lg font-semibold text-muted-foreground line-through">
+                          {inrFormatter.format(plan.originalPrice)}
+                        </span>
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                          {Math.round(((plan.originalPrice - plan.price) / plan.originalPrice) * 100)}% OFF
+                        </span>
+                      </div>
+                    ) : null}
+                    <p className="text-3xl font-bold text-primary">
+                      {inrFormatter.format(plan.price)}
+                      <span className="text-lg font-normal text-muted-foreground"> / Attempt</span>
+                    </p>
+                  </div>
                   <p className="mb-6 text-muted-foreground">{plan.bestFor}</p>
                   <ul className="space-y-3 text-foreground">
                     {plan.features.map((feature) => (
@@ -411,7 +427,7 @@ const MentorshipPage: React.FC = () => {
                 </thead>
                 <tbody className="text-foreground">
                   {[
-                    { feature: 'Price (per attempt)', basic: 'INR 1,499', golden: 'INR 2,999', platinum: 'INR 4,999' },
+                    { feature: 'Price (per attempt)', basic: 'INR 1,249 (was INR 1,499)', golden: 'INR 2,499 (was INR 2,999)', platinum: 'INR 4,499 (was INR 4,999)' },
                     {
                       feature: 'Study Planner',
                       basic: 'Basic study planner',

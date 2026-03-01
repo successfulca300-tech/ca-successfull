@@ -73,7 +73,23 @@ Detailed answer keys provided
   {
     _id: 's2',
     title: '50% Syllabus Test Series',
-    description: 'Focused test series covering the most important 50% of the syllabus. 2 test papers per subject across all groups.',
+    description: `50% Syllabus Test Series
+
+Ideal for students who want to test preparation in two phases
+
+2 Papers per subject
+
+50% + 50% syllabus coverage = 100%
+
+Helps in gradual and structured syllabus completion
+
+Enroll subject-wise, group-wise or in combinations
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
     seriesType: 'S2',
     seriesTypeLabel: '50% Syllabus',
     price: 2000,
@@ -98,7 +114,25 @@ Detailed answer keys provided
   {
     _id: 's3',
     title: '30% Syllabus Test Series',
-    description: 'Quick revision test series covering 30% of the syllabus. 1 test paper per subject.',
+    description: `30% Syllabus Test Series
+
+Perfect for early-stage CA preparation
+
+Syllabus divided into smaller and manageable parts
+
+3 Papers per subject
+
+30% + 30% + 30% syllabus coverage = 100%
+
+Helps in concept-wise and topic-wise preparation
+
+Enroll subject-wise, group-wise or in combinations
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
     seriesType: 'S3',
     seriesTypeLabel: '30% Syllabus',
     price: 2000,
@@ -123,7 +157,27 @@ Detailed answer keys provided
   {
     _id: 's4',
     title: 'CA Successful Specials',
-    description: 'Special test series with curated questions and advanced preparation materials.',
+    description: `CA Successful Test Series
+
+Designed for serious CA aspirants aiming for exam success
+
+Total 6 papers per subject for multiple revisions
+
+1 Full syllabus paper (100% coverage)
+
+2 Half syllabus papers (50% + 50%)
+
+3 Part syllabus papers (30% + 30% + 30%)
+
+Complete syllabus covered with repeated practice
+
+Enroll subject-wise or group-wise
+
+Expert evaluation within 48-72 hours
+
+Question papers as per ICAI marking scheme
+
+Detailed answer keys provided`,
     seriesType: 'S4',
     seriesTypeLabel: 'CA Successful Specials',
     price: 2000,
