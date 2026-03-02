@@ -24,6 +24,8 @@ const FreeResources = () => {
   const { resources: freeNotes, loading: freeNotesLoading } = usePublishedResources({
     resourceCategory: 'notes',
     category: activeCategory !== 'All' ? activeCategory : undefined,
+    fetchAll: true,
+    limit: 100,
   });
 
   useEffect(() => {
@@ -42,22 +44,42 @@ const FreeResources = () => {
 
   useEffect(() => {
     const fetchFreeResources = async () => {
+      const fetchAllFromPaginatedEndpoint = async <T,>(
+        fetcher: (params: { page: number; limit: number }) => Promise<any>,
+        listKey: string
+      ): Promise<T[]> => {
+        const limit = 100;
+        let page = 1;
+        let pages = 1;
+        const allItems: T[] = [];
+
+        do {
+          const response = await fetcher({ page, limit });
+          const batch = Array.isArray(response?.[listKey]) ? response[listKey] : [];
+          allItems.push(...batch);
+          pages = Number(response?.pages) || 1;
+          page += 1;
+        } while (page <= pages);
+
+        return allItems;
+      };
+
       try {
         setLoading(true);
 
         // Fetch free courses
-        const coursesRes = await coursesAPI.getAll();
-        const freeCoursesData = coursesRes.courses?.filter((course: any) => course.price === 0 || course.isFree) || [];
+        const allCourses = await fetchAllFromPaginatedEndpoint<any>(coursesAPI.getAll, 'courses');
+        const freeCoursesData = allCourses.filter((course: any) => course.price === 0 || course.isFree) || [];
         setFreeCourses(freeCoursesData);
 
         // Fetch free test series
-        const testSeriesRes = await testSeriesAPI.getAll();
-        const freeTestSeriesData = testSeriesRes.testSeries?.filter((ts: any) => ts.price === 0 || ts.isFree) || [];
+        const allTestSeries = await fetchAllFromPaginatedEndpoint<any>(testSeriesAPI.getAll, 'testSeries');
+        const freeTestSeriesData = allTestSeries.filter((ts: any) => ts.price === 0 || ts.isFree) || [];
         setFreeTestSeries(freeTestSeriesData);
 
         // Fetch free books
-        const booksRes = await booksAPI.getAll();
-        const freeBooksData = booksRes.books?.filter((book: any) => book.price === 0 || book.isFree) || [];
+        const allBooks = await fetchAllFromPaginatedEndpoint<any>(booksAPI.getAll, 'books');
+        const freeBooksData = allBooks.filter((book: any) => book.price === 0 || book.isFree) || [];
         setFreeBooks(freeBooksData);
 
       } catch (err) {

@@ -6,6 +6,7 @@ interface FetchResourcesParams {
   category?: string;
   page?: number;
   limit?: number;
+  fetchAll?: boolean;
 }
 
 export const usePublishedResources = (params: FetchResourcesParams) => {
@@ -24,25 +25,59 @@ export const usePublishedResources = (params: FetchResourcesParams) => {
       setError(null);
 
       try {
-        let url = `/typed-resources/published/${params.resourceCategory}`;
-        const queryParams = new URLSearchParams();
+        const buildUrl = (pageValue?: number) => {
+          let url = `/typed-resources/published/${params.resourceCategory}`;
+          const queryParams = new URLSearchParams();
 
-        if (params.category) queryParams.append('category', params.category);
-        if (params.page) queryParams.append('page', String(params.page));
-        if (params.limit) queryParams.append('limit', String(params.limit));
+          if (params.category) queryParams.append('category', params.category);
+          if (pageValue) queryParams.append('page', String(pageValue));
+          if (params.limit) queryParams.append('limit', String(params.limit));
 
-        if (queryParams.toString()) {
-          url += `?${queryParams.toString()}`;
+          if (queryParams.toString()) {
+            url += `?${queryParams.toString()}`;
+          }
+
+          return url;
+        };
+
+        if (params.fetchAll) {
+          const perPage = params.limit || 100;
+          let currentPage = 1;
+          let totalPages = 1;
+          let total = 0;
+          const allResources: any[] = [];
+
+          do {
+            const queryParams = new URLSearchParams();
+            if (params.category) queryParams.append('category', params.category);
+            queryParams.append('page', String(currentPage));
+            queryParams.append('limit', String(perPage));
+
+            const url = `/typed-resources/published/${params.resourceCategory}?${queryParams.toString()}`;
+            const data = await apiRequest<any>(url);
+
+            const batch = data.resources || [];
+            allResources.push(...batch);
+            totalPages = data.pages || 1;
+            total = data.total || allResources.length;
+            currentPage += 1;
+          } while (currentPage <= totalPages);
+
+          setResources(allResources);
+          setPagination({
+            page: 1,
+            pages: totalPages,
+            total,
+          });
+        } else {
+          const data = await apiRequest<any>(buildUrl(params.page));
+          setResources(data.resources || []);
+          setPagination({
+            page: data.page || 1,
+            pages: data.pages || 0,
+            total: data.total || 0,
+          });
         }
-
-        const data = await apiRequest<any>(url);
-        
-        setResources(data.resources || []);
-        setPagination({
-          page: data.page || 1,
-          pages: data.pages || 0,
-          total: data.total || 0,
-        });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch resources');
       } finally {
@@ -51,7 +86,7 @@ export const usePublishedResources = (params: FetchResourcesParams) => {
     };
 
     fetchResources();
-  }, [params.resourceCategory, params.category, params.page, params.limit]);
+  }, [params.resourceCategory, params.category, params.page, params.limit, params.fetchAll]);
 
   return {
     resources,
