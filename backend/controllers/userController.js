@@ -25,26 +25,207 @@ const SERIES_TYPE_LABELS = {
   s4: 'CA Successful Specials',
 };
 
-const normalizePurchasedSubjects = (subjects = []) => {
-  if (!Array.isArray(subjects)) return [];
-  const seen = new Set();
-  const normalized = [];
+const MENTORSHIP_PLAN_TITLES = {
+  mentorship_basic_01: 'Basic Mentorship Plan',
+  mentorship_golden_02: 'Golden Mentorship Plan',
+  mentorship_platinum_03: 'Platinum Mentorship Plan',
+};
 
-  for (const raw of subjects) {
-    if (!raw) continue;
-    const val = String(raw).trim();
-    if (!val) continue;
-    const parts = val.split('-');
-    const subject = (parts[parts.length - 1] || '').trim();
-    if (!subject) continue;
-    const key = subject.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      normalized.push(subject);
+const SUBJECT_LABELS = {
+  fr: 'FR',
+  afm: 'AFM',
+  audit: 'Audit',
+  dt: 'DT',
+  idt: 'IDT',
+  aa: 'AA',
+  cl: 'CL',
+  tx: 'TX',
+  taxation: 'Taxation',
+  costing: 'Costing',
+  fmsm: 'FM SM',
+  fmsmtheory: 'FM SM',
+  advaccounting: 'Advanced Accounting',
+  advanceaccounting: 'Advanced Accounting',
+  corporatelaw: 'Corporate Law',
+};
+
+const toTitleCase = (value = '') =>
+  String(value)
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+
+const normalizeSubjectLabel = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+  if (SUBJECT_LABELS[compact]) return SUBJECT_LABELS[compact];
+
+  return toTitleCase(raw);
+};
+
+const parseKnownSeriesLabel = (value = '') => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const compact = raw.toLowerCase().replace(/\s+/g, '');
+
+  let match = compact.match(/^series(\d+)$/);
+  if (match) return `Series ${Number(match[1])}`;
+
+  // Handles short forms like i1/s1 used in some legacy data
+  match = compact.match(/^[is](\d+)$/);
+  if (match) return `Series ${Number(match[1])}`;
+
+  match = compact.match(/^group(\d+)$/);
+  if (match) return `Group ${Number(match[1])}`;
+
+  match = compact.match(/^g(\d+)$/);
+  if (match) return `Group ${Number(match[1])}`;
+
+  return null;
+};
+
+const compareSeriesLabel = (a, b) => {
+  const seriesA = String(a || '').match(/^Series\s+(\d+)$/i);
+  const seriesB = String(b || '').match(/^Series\s+(\d+)$/i);
+  if (seriesA && seriesB) return Number(seriesA[1]) - Number(seriesB[1]);
+  if (seriesA) return -1;
+  if (seriesB) return 1;
+
+  const groupA = String(a || '').match(/^Group\s+(\d+)$/i);
+  const groupB = String(b || '').match(/^Group\s+(\d+)$/i);
+  if (groupA && groupB) return Number(groupA[1]) - Number(groupB[1]);
+  if (groupA) return -1;
+  if (groupB) return 1;
+
+  return String(a || '').localeCompare(String(b || ''));
+};
+
+const buildSeriesSubjectSummary = (entries = []) => {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+  return entries
+    .sort((a, b) => compareSeriesLabel(a.series, b.series))
+    .map((entry) => `${entry.series}: ${entry.subjects.join(', ')}`)
+    .join('; ');
+};
+
+const extractTestSeriesSelection = (subjects = []) => {
+  if (!Array.isArray(subjects)) return { subjects: [], seriesDetails: [] };
+
+  const subjectSeen = new Set();
+  const plainSubjects = [];
+  const seriesMap = new Map();
+
+  const addSubject = (seriesLabel, rawSubject) => {
+    const normalizedSubject = normalizeSubjectLabel(rawSubject);
+    if (!normalizedSubject) return;
+
+    const subjectKey = normalizedSubject.toLowerCase().replace(/\s+/g, '');
+    if (!subjectSeen.has(subjectKey)) {
+      subjectSeen.add(subjectKey);
+      plainSubjects.push(normalizedSubject);
     }
+
+    if (!seriesLabel) return;
+
+    const mapKey = seriesLabel.toLowerCase();
+    if (!seriesMap.has(mapKey)) {
+      seriesMap.set(mapKey, {
+        series: seriesLabel,
+        subjects: [],
+        seen: new Set(),
+      });
+    }
+
+    const bucket = seriesMap.get(mapKey);
+    if (!bucket.seen.has(subjectKey)) {
+      bucket.seen.add(subjectKey);
+      bucket.subjects.push(normalizedSubject);
+    }
+  };
+
+  for (const rawItem of subjects) {
+    if (!rawItem) continue;
+    const value = String(rawItem).trim();
+    if (!value) continue;
+
+    // Handles legacy format like: i1 (AA, CL, TX)
+    const groupedMatch = value.match(/^([^()]+)\(([^)]+)\)$/);
+    if (groupedMatch) {
+      const seriesToken = groupedMatch[1].trim();
+      const seriesLabel = parseKnownSeriesLabel(seriesToken) || toTitleCase(seriesToken);
+      const groupedSubjects = groupedMatch[2].split(',').map((part) => part.trim()).filter(Boolean);
+      groupedSubjects.forEach((subject) => addSubject(seriesLabel, subject));
+      continue;
+    }
+
+    let seriesLabel = null;
+    let subjectToken = value;
+
+    if (value.includes('-')) {
+      const [prefix, ...rest] = value.split('-').map((part) => part.trim()).filter(Boolean);
+      const parsedSeries = parseKnownSeriesLabel(prefix);
+      if (parsedSeries && rest.length > 0) {
+        seriesLabel = parsedSeries;
+        subjectToken = rest.join('-');
+      }
+    }
+
+    addSubject(seriesLabel, subjectToken);
   }
 
-  return normalized;
+  const seriesDetails = Array.from(seriesMap.values()).map((item) => ({
+    series: item.series,
+    subjects: item.subjects,
+  }));
+
+  return { subjects: plainSubjects, seriesDetails };
+};
+
+const extractMentorshipPaperDetails = (papers = []) => {
+  if (!Array.isArray(papers)) return [];
+
+  const seriesMap = new Map();
+
+  const addPaper = (seriesLabel, subjectToken) => {
+    const normalizedSubject = normalizeSubjectLabel(subjectToken);
+    if (!normalizedSubject) return;
+
+    const finalSeries = seriesLabel || 'Selected Papers';
+    const mapKey = finalSeries.toLowerCase();
+    if (!seriesMap.has(mapKey)) {
+      seriesMap.set(mapKey, { series: finalSeries, subjects: [], seen: new Set() });
+    }
+
+    const bucket = seriesMap.get(mapKey);
+    const subjectKey = normalizedSubject.toLowerCase().replace(/\s+/g, '');
+    if (!bucket.seen.has(subjectKey)) {
+      bucket.seen.add(subjectKey);
+      bucket.subjects.push(normalizedSubject);
+    }
+  };
+
+  for (const rawPaper of papers) {
+    if (!rawPaper) continue;
+    const paperId = String(rawPaper).trim();
+    if (!paperId) continue;
+
+    const matchSeries = paperId.match(/series(\d+)/i);
+    const seriesLabel = matchSeries ? `Series ${Number(matchSeries[1])}` : null;
+
+    const parts = paperId.split(/[_-]/).map((part) => part.trim()).filter(Boolean);
+    const subjectToken = parts[parts.length - 1] || '';
+
+    addPaper(seriesLabel, subjectToken);
+  }
+
+  return Array.from(seriesMap.values()).map((item) => ({
+    series: item.series,
+    subjects: item.subjects,
+  }));
 };
 
 const resolveSeriesDisplayName = (seriesDoc, fallbackIdOrName) => {
@@ -162,24 +343,33 @@ export const getUsers = async (req, res) => {
               }
               tsName = resolveSeriesDisplayName(tsDoc, en.testSeriesId);
 
-              const selectedSubjects = normalizePurchasedSubjects(en.purchasedSubjects);
-              const seriesWithSubjects = selectedSubjects.length > 0
-                ? `${tsName} (${selectedSubjects.join(', ')})`
-                : tsName;
+              const selection = extractTestSeriesSelection(en.purchasedSubjects);
+              const seriesSummary = buildSeriesSubjectSummary(selection.seriesDetails);
+              const seriesWithSubjects = seriesSummary
+                ? `${tsName} (${seriesSummary})`
+                : (selection.subjects.length > 0 ? `${tsName} (${selection.subjects.join(', ')})` : tsName);
 
               enrollmentList.push({
                 type: 'testseries',
                 name: seriesWithSubjects,
                 baseName: tsName,
-                subjects: selectedSubjects,
+                subjects: selection.subjects,
+                seriesDetails: selection.seriesDetails,
               });
             } else if (en.mentorshipId) {
-              const mentorshipPlanTitles = {
-                mentorship_basic_01: 'Basic Mentorship Plan',
-                mentorship_golden_02: 'Golden Mentorship Plan',
-                mentorship_platinum_03: 'Platinum Mentorship Plan'
-              };
-              enrollmentList.push({ type: 'mentorship', name: mentorshipPlanTitles[en.mentorshipId] || String(en.mentorshipId) });
+              const planName = MENTORSHIP_PLAN_TITLES[en.mentorshipId] || String(en.mentorshipId);
+              const mentorshipDetails = extractMentorshipPaperDetails(en.mentorshipPapers);
+              const mentorshipSummary = buildSeriesSubjectSummary(mentorshipDetails);
+              const mentorshipWithDetails = mentorshipSummary
+                ? `${planName} (${mentorshipSummary})`
+                : planName;
+
+              enrollmentList.push({
+                type: 'mentorship',
+                name: mentorshipWithDetails,
+                baseName: planName,
+                seriesDetails: mentorshipDetails,
+              });
             }
           } catch (err) {
             console.warn('Error resolving enrollment name for user', user._id, err);
