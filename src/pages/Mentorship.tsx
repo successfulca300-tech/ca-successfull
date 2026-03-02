@@ -215,7 +215,7 @@ const MentorshipPage: React.FC = () => {
     // For Basic, proceed directly to payment
     try {
       setProcessingPlanId(plan._id);
-      await openRazorpay('mentorship', plan);
+      await openRazorpay('mentorship', plan, plan.price);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Payment failed';
       console.error('Payment error', err);
@@ -231,7 +231,7 @@ const MentorshipPage: React.FC = () => {
     try {
       setProcessingPlanId(selectedPlan._id);
       // Pass papers as metadata to Razorpay
-      await openRazorpay('mentorship', selectedPlan, undefined, papers);
+      await openRazorpay('mentorship', selectedPlan, selectedPlan.price, papers);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Payment failed';
       console.error('Payment error', err);

@@ -165,12 +165,26 @@ const TestSeries = () => {
 
                   {/* Card Footer - Price Label & Button */}
                   <div className="p-4 space-y-3">
-                    <div>
-                      { (test.seriesType === 'S4') ? (
-                        <p className="text-sm text-muted-foreground">Starting from <span className="font-semibold">₹{test.pricing?.subjectPrice ?? 1200}</span></p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Started from <span className="font-semibold">₹{test.pricing?.subjectPrice ?? 450}</span></p>
-                      ) }
+                    <div className="text-sm text-muted-foreground">
+                      {(() => {
+                        const discountPercent = 20;
+                        const originalPrice = Number(
+                          test.pricing?.subjectPrice ?? (test.seriesType === 'S4' ? 1200 : 450)
+                        );
+                        const discountedPrice = Math.round(originalPrice * (1 - discountPercent / 100));
+                        const prefix = test.seriesType === 'S4' ? 'Starting from ' : 'Started from ';
+
+                        return (
+                          <>
+                            <span>{prefix}</span>
+                            <span className="line-through text-gray-500 mr-2">{"\u20B9"}{originalPrice}</span>
+                            <span className="font-semibold text-primary mr-2">{"\u20B9"}{discountedPrice}</span>
+                            <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                              {discountPercent}% OFF
+                            </span>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     <Button
@@ -226,3 +240,4 @@ const TestSeries = () => {
 };
 
 export default TestSeries;
+
