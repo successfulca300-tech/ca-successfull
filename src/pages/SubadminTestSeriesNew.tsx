@@ -116,6 +116,12 @@ const SubAdminTestSeriesNew = () => {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [uploadingPaper, setUploadingPaper] = useState(false);
 
+  const getDefaultSyllabusBySeriesType = (seriesType?: string): '100%' | '50%' | '30%' => {
+    if (seriesType === 'S2') return '50%';
+    if (seriesType === 'S3') return '30%';
+    return '100%';
+  };
+
   // Check auth
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -279,8 +285,14 @@ const SubAdminTestSeriesNew = () => {
       }
 
       setUploadingPaper(true);
+      const selectedSeries = seriesList.find((s) => s._id === paperData.testSeriesId);
+      const effectiveSyllabusPercentage = (selectedSeries?.seriesType === 'S2' || selectedSeries?.seriesType === 'S3')
+        ? getDefaultSyllabusBySeriesType(selectedSeries?.seriesType)
+        : paperData.syllabusPercentage;
+
       const payload = {
         ...paperData,
+        syllabusPercentage: effectiveSyllabusPercentage,
         appwriteFileId: 'temp-file-id', // Will be replaced with actual upload
         appwriteBucketId: 'test-papers',
         publicFileUrl: '/papers/' + paperData.fileName,
@@ -298,7 +310,7 @@ const SubAdminTestSeriesNew = () => {
           subject: 'FR',
           paperType: 'question',
           paperNumber: 1,
-          syllabusPercentage: '100%',
+          syllabusPercentage: getDefaultSyllabusBySeriesType(selectedSeries?.seriesType),
           series: 'series1',
           fileName: '',
           availabilityDate: new Date().toISOString().split('T')[0],
@@ -323,6 +335,18 @@ const SubAdminTestSeriesNew = () => {
       console.error('Failed to load papers:', error);
     }
   };
+
+  useEffect(() => {
+    if (!paperData.testSeriesId) return;
+    const selectedSeries = seriesList.find((s) => s._id === paperData.testSeriesId);
+    const forcedSyllabus = getDefaultSyllabusBySeriesType(selectedSeries?.seriesType);
+    if (selectedSeries?.seriesType === 'S2' || selectedSeries?.seriesType === 'S3') {
+      setPaperData((prev) => ({
+        ...prev,
+        syllabusPercentage: forcedSyllabus,
+      }));
+    }
+  }, [paperData.testSeriesId, seriesList]);
 
   return (
     <Layout>

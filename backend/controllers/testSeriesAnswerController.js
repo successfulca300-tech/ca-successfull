@@ -4,6 +4,48 @@ import TestSeries from '../models/TestSeries.js';
 import { uploadFileToAppwrite, deleteFileFromAppwrite } from '../utils/appwriteFileService.js';
 import mongoose from 'mongoose';
 
+const parseConfiguredDeadline = (value) => {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const exactDate = new Date(value);
+    exactDate.setHours(23, 59, 59, 999);
+    return exactDate;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const withoutOrdinal = raw.replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, '$1');
+  const extractedDate = withoutOrdinal.match(/(\d{1,2}\s+[A-Za-z]+\s+\d{4})/);
+  const target = extractedDate ? extractedDate[1] : withoutOrdinal;
+  const parsed = new Date(target);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  parsed.setHours(23, 59, 59, 999);
+  return parsed;
+};
+
+const getSubmissionDeadlineFromSeries = (seriesDates = {}, paperGroup = '') => {
+  const normalizedGroup = String(paperGroup || '').toLowerCase();
+  let deadlineValue = seriesDates?.submissionDeadline;
+
+  if (normalizedGroup.includes('group 1')) {
+    deadlineValue = seriesDates?.group1SubmissionDate || seriesDates?.submissionDeadline;
+  } else if (normalizedGroup.includes('group 2')) {
+    deadlineValue = seriesDates?.group2SubmissionDate || seriesDates?.submissionDeadline;
+  } else if (normalizedGroup.includes('both')) {
+    deadlineValue = seriesDates?.submissionDeadline || seriesDates?.group2SubmissionDate || seriesDates?.group1SubmissionDate;
+  }
+
+  return parseConfiguredDeadline(deadlineValue);
+};
+
+const formatDeadlineForMessage = (dateValue) => {
+  const day = dateValue.getDate();
+  const month = dateValue.toLocaleString('default', { month: 'long' });
+  const year = dateValue.getFullYear();
+  return `${day} ${month} ${year}`;
+};
+
 // @desc    Upload answer sheet for a paper
 // @route   POST /api/testseries/answers/upload
 // @access  Private
@@ -121,17 +163,18 @@ export const uploadAnswerSheet = async (req, res) => {
       console.log('[AnswerSheet] Enrollment verified');
     }
 
-    // Check if submission deadline has passed
-    if (paper.availabilityDate) {
-      const lastSubmissionDate = new Date(paper.availabilityDate);
-      // Add 1 day to availability date as last submission date (can be adjusted)
-      lastSubmissionDate.setDate(lastSubmissionDate.getDate() + 1);
-      if (new Date() > lastSubmissionDate) {
-        return res.status(400).json({
-          success: false,
-          message: 'Submission deadline has passed'
-        });
-      }
+    // Check fixed submission deadline from test series configuration (group-wise)
+    let deadlineSeries = testSeries;
+    if (!deadlineSeries && paper?.testSeriesId) {
+      deadlineSeries = await TestSeries.findById(paper.testSeriesId).select('seriesDates');
+    }
+
+    const configuredDeadline = getSubmissionDeadlineFromSeries(deadlineSeries?.seriesDates, paper?.group);
+    if (configuredDeadline && new Date() > configuredDeadline) {
+      return res.status(400).json({
+        success: false,
+        message: `Submission deadline has passed (${formatDeadlineForMessage(configuredDeadline)})`
+      });
     }
 
     // Upload file to Appwrite

@@ -27,6 +27,16 @@ function sanitizeFileId(filename) {
   return base;
 }
 
+function sanitizeDownloadFileName(rawName) {
+  const cleaned = String(rawName || '').trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/^\.+/, '');
+  if (!cleaned) return 'file.pdf';
+  if (cleaned.toLowerCase().endsWith('.pdf')) return cleaned;
+  return `${cleaned}.pdf`;
+}
+
 // POST /api/files/token
 // Body: { fileId, courseId?, testSeriesId?, bookId? }
 export const generateFileViewToken = async (req, res) => {
@@ -175,6 +185,9 @@ export const generateFileViewToken = async (req, res) => {
 export const proxyFileView = async (req, res) => {
   try {
     const { token } = req.params;
+    const mode = String(req.query?.mode || '').toLowerCase();
+    const forceDownload = mode === 'download';
+    const requestedFileName = sanitizeDownloadFileName(req.query?.filename);
     if (!token) {
       const html = htmlPage('File not available', 'Token required to view this file.');
       return res.status(400).set('Content-Type', 'text/html').send(html);
@@ -268,6 +281,13 @@ export const proxyFileView = async (req, res) => {
     const contentType = fetchRes.headers.get('content-type') || 'application/octet-stream';
     const buffer = Buffer.from(await fetchRes.arrayBuffer());
     res.set('Content-Type', contentType);
+    if (forceDownload) {
+      const safeAsciiFileName = requestedFileName.replace(/"/g, '');
+      const encodedFileName = encodeURIComponent(requestedFileName);
+      res.set('Content-Disposition', `attachment; filename="${safeAsciiFileName}"; filename*=UTF-8''${encodedFileName}`);
+    } else {
+      res.set('Content-Disposition', 'inline');
+    }
     res.send(buffer);
   } catch (err) {
     console.error('proxyFileView error', err);

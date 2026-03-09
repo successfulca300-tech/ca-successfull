@@ -742,12 +742,12 @@ const Dashboard = () => {
                                 </div>
 
                                 {/* Expiry Date */}
-                                <div className="flex justify-between items-center">
+                                {/* <div className="flex justify-between items-center">
                                   <span className="text-sm text-gray-600">Expires at:</span>
                                   <span className="text-sm font-medium text-gray-900">
                                     {expiryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}, 12:00 AM
                                   </span>
-                                </div>
+                                </div> */}
 
                                 {/* Divider */}
                                 <div className="border-t border-gray-200"></div>

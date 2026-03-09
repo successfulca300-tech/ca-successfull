@@ -21,16 +21,22 @@ const HeroSection = () => {
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto lg:mx-0 animate-fade-in leading-relaxed" style={{ animationDelay: "0.2s" }}>
               Your journey to becoming a successful Chartered Accountant starts here. Structured guidance, comprehensive study materials, and focused practice built for CA exams.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-fade-in" style={{ animationDelay: "0.3s" }}>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 justify-center lg:justify-start animate-fade-in" style={{ animationDelay: "0.3s" }}>
               <Link to="/test-series">
                 <Button className="btn-primary text-lg px-8 py-6 w-full sm:w-auto">
                   <GraduationCap className="w-5 h-5 mr-2" />
-                  Explore Test Series
+                  Explore CA Final Test Series
+                </Button>
+              </Link>
+              <Link to="/test-series/ca-inter">
+                <Button variant="outline" className="btn-outline text-lg px-8 py-6 w-full sm:w-auto">
+                  <BookOpen className="w-5 h-5 mr-2" />
+                  Explore CA Inter Test Series
                 </Button>
               </Link>
               <Link to="/mentorship">
                 <Button variant="outline" className="btn-outline text-lg px-8 py-6 w-full sm:w-auto">
-                  <BookOpen className="w-5 h-5 mr-2" />
+                  <Trophy className="w-5 h-5 mr-2" />
                   Mentorship Program
                 </Button>
               </Link>

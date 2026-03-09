@@ -167,7 +167,7 @@ const TestSeries = () => {
                   <div className="p-4 space-y-3">
                     <div className="text-sm text-muted-foreground">
                       {(() => {
-                        const discountPercent = 20;
+                        const discountPercent = test.seriesType === 'S4' ? 16 : 20;
                         const originalPrice = Number(
                           test.pricing?.subjectPrice ?? (test.seriesType === 'S4' ? 1200 : 450)
                         );

@@ -5,6 +5,22 @@ import { uploadFileToAppwrite, deleteFileFromAppwrite } from '../utils/appwriteF
 import fs from 'fs';
 import mongoose from 'mongoose';
 
+const normalizeSyllabusPercentageForSeries = (seriesType, providedValue) => {
+  const current = ['100%', '50%', '30%'].includes(String(providedValue)) ? String(providedValue) : '100%';
+  if (seriesType === 'S1') return '100%';
+  if (seriesType === 'S2') return '50%';
+  if (seriesType === 'S3') return '30%';
+  return current; // Keep as-is for S4 or unknown
+};
+
+const normalizePaperForSeries = (paper, seriesType) => {
+  const normalized = normalizeSyllabusPercentageForSeries(seriesType, paper?.syllabusPercentage);
+  if (paper && typeof paper.toObject === 'function') {
+    return { ...paper.toObject(), syllabusPercentage: normalized };
+  }
+  return { ...paper, syllabusPercentage: normalized };
+};
+
 // @desc    Upload test series paper with file to Appwrite
 // @route   POST /api/testseries/:testSeriesId/papers
 // @access  Private/SubAdmin
@@ -149,6 +165,8 @@ export const uploadPaper = async (req, res) => {
       seriesValue = null;
     }
 
+    const normalizedSyllabusPercentage = normalizeSyllabusPercentageForSeries(testSeries?.seriesType, syllabusPercentage);
+
     // Upload file to Appwrite
     console.log(`[Upload] Uploading to Appwrite: ${fileName} (${fileBuffer.length} bytes)`);
     const appwriteResponse = await uploadFileToAppwrite(
@@ -167,7 +185,7 @@ export const uploadPaper = async (req, res) => {
       subject,
       paperType,
       paperNumber: parseInt(paperNumber) || 1,
-      syllabusPercentage,
+      syllabusPercentage: normalizedSyllabusPercentage,
       series: seriesValue,
       fileName: fileName,
       appwriteFileId: appwriteResponse.fileId,
@@ -262,7 +280,8 @@ export const getPapersByTestSeries = async (req, res) => {
       .populate('createdBy', 'name')
       .sort({ paperNumber: 1, createdAt: 1 });
 
-    res.json({ success: true, papers });
+    const normalizedPapers = papers.map((paper) => normalizePaperForSeries(paper, testSeries?.seriesType));
+    res.json({ success: true, papers: normalizedPapers });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -306,7 +325,7 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     // If no paid enrollment, return empty papers
     if (!enrollments || enrollments.length === 0) {
-      console.log(`[Access Control] No paid enrollment found for user ${userId} on series ${normalizedTestSeriesId}`);
+      console.log(`[Access Control] No paid enrollment found for user ${userId} on series ${resolvedTestSeries._id}`);
       return res.json({ success: true, papers: {} });
     }
 
@@ -356,9 +375,11 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     console.log(`[Access Control] Found ${papers.length} papers for user ${userId}`);
 
+    const normalizedPapers = papers.map((paper) => normalizePaperForSeries(paper, resolvedTestSeries?.seriesType));
+
     // Group papers by subject
     const groupedPapers = {};
-    papers.forEach(paper => {
+    normalizedPapers.forEach(paper => {
       if (!groupedPapers[paper.subject]) {
         groupedPapers[paper.subject] = [];
       }
@@ -386,7 +407,8 @@ export const getMyPapers = async (req, res) => {
       .populate('createdBy', 'name')
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, papers });
+    const normalizedPapers = papers.map((paper) => normalizePaperForSeries(paper, paper?.testSeriesId?.seriesType));
+    res.json({ success: true, papers: normalizedPapers });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -445,14 +467,19 @@ export const updatePaper = async (req, res) => {
     if (subject !== undefined) paper.subject = subject;
     if (paperType !== undefined) paper.paperType = paperType;
     if (paperNumber !== undefined) paper.paperNumber = paperNumber;
-    if (syllabusPercentage !== undefined) paper.syllabusPercentage = syllabusPercentage;
+    if (syllabusPercentage !== undefined) {
+      paper.syllabusPercentage = normalizeSyllabusPercentageForSeries(testSeries?.seriesType, syllabusPercentage);
+    } else if (testSeries?.seriesType === 'S1' || testSeries?.seriesType === 'S2' || testSeries?.seriesType === 'S3') {
+      // Keep legacy data clean if old rows had wrong percentage values
+      paper.syllabusPercentage = normalizeSyllabusPercentageForSeries(testSeries?.seriesType, paper.syllabusPercentage);
+    }
     if (fileName !== undefined) paper.fileName = fileName;
     if (availabilityDate !== undefined) paper.availabilityDate = availabilityDate;
     if (isAvailable !== undefined) paper.isAvailable = isAvailable;
     if (isEvaluated !== undefined) paper.isEvaluated = isEvaluated;
 
     const updatedPaper = await paper.save();
-    res.json({ success: true, paper: updatedPaper });
+    res.json({ success: true, paper: normalizePaperForSeries(updatedPaper, testSeries?.seriesType) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });

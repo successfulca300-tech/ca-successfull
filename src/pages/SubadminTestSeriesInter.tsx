@@ -97,6 +97,12 @@ const SubadminTestSeriesInter = () => {
     availabilityDate: new Date().toISOString().split('T')[0],
   });
 
+  const getDefaultSyllabusForTab = (tab: string): '100%' | '50%' | '30%' => {
+    if (tab === 'inter-s2') return '50%';
+    if (tab === 'inter-s3') return '30%';
+    return '100%';
+  };
+
   // Check auth and role
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -327,13 +333,19 @@ const SubadminTestSeriesInter = () => {
         return;
       }
 
+      const effectiveSyllabusPercentage = activeTab === 'inter-s2'
+        ? '50%'
+        : activeTab === 'inter-s3'
+          ? '30%'
+          : paperForm.syllabusPercentage;
+
       const formData = new FormData();
       formData.append('paper', file);
       formData.append('group', paperForm.group);
       formData.append('subject', paperForm.subject);
       formData.append('paperType', paperForm.paperType);
       formData.append('paperNumber', String(paperForm.paperNumber));
-      formData.append('syllabusPercentage', paperForm.syllabusPercentage);
+      formData.append('syllabusPercentage', effectiveSyllabusPercentage);
       if (activeTab === 'inter-s1') {
         formData.append('series', paperForm.series);
       }
@@ -351,7 +363,7 @@ const SubadminTestSeriesInter = () => {
           subject: 'Advance accounting',
           paperType: 'question',
           paperNumber: 1,
-          syllabusPercentage: '100%',
+          syllabusPercentage: getDefaultSyllabusForTab(activeTab),
           series: 'series1',
           fileName: '',
           availabilityDate: new Date().toISOString().split('T')[0],
@@ -384,6 +396,15 @@ const SubadminTestSeriesInter = () => {
       toast.error(error.message || 'Failed to delete paper');
     }
   };
+
+  useEffect(() => {
+    setPaperForm((prev) => ({
+      ...prev,
+      syllabusPercentage: getDefaultSyllabusForTab(activeTab),
+      paperNumber: 1,
+      series: 'series1',
+    }));
+  }, [activeTab]);
 
   return (
     <Layout>

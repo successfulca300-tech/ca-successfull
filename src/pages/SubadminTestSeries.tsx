@@ -105,6 +105,12 @@ const SubadminTestSeries = () => {
     availabilityDate: new Date().toISOString().split('T')[0],
   });
 
+  const getDefaultSyllabusForTab = (tab: string): '100%' | '50%' | '30%' => {
+    if (tab === 's2') return '50%';
+    if (tab === 's3') return '30%';
+    return '100%';
+  };
+
   // Check auth and role
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -347,13 +353,19 @@ const SubadminTestSeries = () => {
       }
 
       // Create FormData for file upload
+      const effectiveSyllabusPercentage = activeTab === 's2'
+        ? '50%'
+        : activeTab === 's3'
+          ? '30%'
+          : paperForm.syllabusPercentage;
+
       const formData = new FormData();
       formData.append('paper', file);
       formData.append('group', paperForm.group);
       formData.append('subject', paperForm.subject);
       formData.append('paperType', paperForm.paperType);
       formData.append('paperNumber', String(paperForm.paperNumber));
-      formData.append('syllabusPercentage', paperForm.syllabusPercentage);
+      formData.append('syllabusPercentage', effectiveSyllabusPercentage);
       if (activeTab === 's1') {
         formData.append('series', paperForm.series);
       }
@@ -373,7 +385,7 @@ const SubadminTestSeries = () => {
           subject: 'FR',
           paperType: 'question',
           paperNumber: 1,
-          syllabusPercentage: '100%',
+          syllabusPercentage: getDefaultSyllabusForTab(activeTab),
           series: 'series1',
           fileName: '',
           availabilityDate: new Date().toISOString().split('T')[0],
@@ -413,6 +425,15 @@ const SubadminTestSeries = () => {
       fetchPapersForSeries(activeTab);
     }
   }, [activeTab, expandedSeries]);
+
+  useEffect(() => {
+    setPaperForm((prev) => ({
+      ...prev,
+      syllabusPercentage: getDefaultSyllabusForTab(activeTab),
+      paperNumber: 1,
+      series: 'series1',
+    }));
+  }, [activeTab]);
 
   if (!user) {
     return (
