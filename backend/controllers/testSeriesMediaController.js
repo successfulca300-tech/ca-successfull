@@ -5,6 +5,13 @@ import mongoose from 'mongoose';
 import TestSeries from '../models/TestSeries.js';
 import TestSeriesMedia from '../models/TestSeriesMedia.js';
 
+const getSeriesTypeLabel = (seriesType, examLevel = 'final') => {
+  if (seriesType === 'S1') return 'Full Syllabus';
+  if (seriesType === 'S2') return '50% Syllabus';
+  if (seriesType === 'S3') return examLevel === 'inter' ? 'Chapterwise' : '30% Syllabus';
+  return 'CA Successful Specials';
+};
+
 /**
  * Upload media file for test series (video, image, etc.)
  * Handles multipart file uploads and stores in Appwrite
@@ -155,7 +162,7 @@ export const uploadTestSeriesMedia = async (req, res) => {
                 testSeries = await TestSeries.create({
                   title: `Test Series ${upper}`,
                   seriesType: upper,
-                  seriesTypeLabel: upper === 'S1' ? 'Full Syllabus' : upper === 'S2' ? '50% Syllabus' : upper === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                  seriesTypeLabel: getSeriesTypeLabel(upper, 'final'),
                   category: null,
                   createdBy: req.user._id,
                   publishStatus: 'published',
@@ -183,7 +190,7 @@ export const uploadTestSeriesMedia = async (req, res) => {
                 testSeries = await TestSeries.create({
                   title: `Test Series ${seriesType}`,
                   seriesType,
-                  seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                  seriesTypeLabel: getSeriesTypeLabel(seriesType, derivedExamLevel),
                   category: null,
                   createdBy: req.user._id,
                   publishStatus: 'published',
@@ -199,7 +206,7 @@ export const uploadTestSeriesMedia = async (req, res) => {
                 testSeries = await TestSeries.create({
                   title: `Test Series ${seriesType}`,
                   seriesType,
-                  seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                  seriesTypeLabel: getSeriesTypeLabel(seriesType, 'final'),
                   category: null,
                   createdBy: req.user._id,
                   publishStatus: 'published',
@@ -282,13 +289,14 @@ export const uploadTestSeriesMedia = async (req, res) => {
         // 3) Try plain seriesType like 'S1','S2' etc.
         if (!testSeries) {
           const upper = String(testSeriesId || '').toUpperCase();
-          if (['S1', 'S2', 'S3', 'S4'].includes(upper)) {
+          const hasPrefix = String(testSeriesId || '').includes('-');
+          if (['S1', 'S2', 'S3', 'S4'].includes(upper) && !hasPrefix) {
             testSeries = await TestSeries.findOne({ seriesType: upper });
               if (!testSeries) {
               testSeries = await TestSeries.create({
                 title: `Test Series ${upper}`,
                 seriesType: upper,
-                seriesTypeLabel: upper === 'S1' ? 'Full Syllabus' : upper === 'S2' ? '50% Syllabus' : upper === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
+                seriesTypeLabel: getSeriesTypeLabel(upper, 'final'),
                 category: null,
                 createdBy: req.user._id,
                 publishStatus: 'published',
@@ -305,20 +313,38 @@ export const uploadTestSeriesMedia = async (req, res) => {
           const m = String(testSeriesId || '').match(/(s[1-4])$/i);
           if (m) {
             const seriesType = m[1].toUpperCase();
-            testSeries = await TestSeries.findOne({ seriesType });
+            const hasPrefix = String(testSeriesId || '').includes('-');
+            if (hasPrefix) {
+              testSeries = await TestSeries.findOne({ fixedKey: { $regex: `^${testSeriesId}$`, $options: 'i' } });
               if (!testSeries) {
-              const derivedExamLevel = String(testSeriesId || '').toLowerCase().startsWith('inter-') ? 'inter' : 'final';
-              testSeries = await TestSeries.create({
-                title: `Test Series ${seriesType}`,
-                seriesType,
-                seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
-                category: null,
-                createdBy: req.user._id,
-                publishStatus: 'published',
-                isActive: true,
-                fixedKey: testSeriesId,
-                examLevel: derivedExamLevel,
-              });
+                const derivedExamLevel = String(testSeriesId || '').toLowerCase().startsWith('inter-') ? 'inter' : 'final';
+                testSeries = await TestSeries.create({
+                  title: `Test Series ${seriesType}`,
+                  seriesType,
+                  seriesTypeLabel: getSeriesTypeLabel(seriesType, derivedExamLevel),
+                  category: null,
+                  createdBy: req.user._id,
+                  publishStatus: 'published',
+                  isActive: true,
+                  fixedKey: testSeriesId,
+                  examLevel: derivedExamLevel,
+                });
+              }
+            } else {
+              testSeries = await TestSeries.findOne({ seriesType });
+              if (!testSeries) {
+                testSeries = await TestSeries.create({
+                  title: `Test Series ${seriesType}`,
+                  seriesType,
+                  seriesTypeLabel: getSeriesTypeLabel(seriesType, 'final'),
+                  category: null,
+                  createdBy: req.user._id,
+                  publishStatus: 'published',
+                  isActive: true,
+                  fixedKey: testSeriesId,
+                  examLevel: 'final',
+                });
+              }
             }
           }
         }

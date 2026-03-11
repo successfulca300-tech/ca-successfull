@@ -98,8 +98,9 @@ const SubadminTestSeriesInter = () => {
   });
 
   const getDefaultSyllabusForTab = (tab: string): '100%' | '50%' | '30%' => {
-    if (tab === 'inter-s2') return '50%';
-    if (tab === 'inter-s3') return '30%';
+    const selected = getAllSeries().find((s) => s._id === tab);
+    if (selected?.seriesType === 'S2') return '50%';
+    if (selected?.seriesType === 'S3') return '30%';
     return '100%';
   };
 
@@ -288,6 +289,30 @@ const SubadminTestSeriesInter = () => {
     const series = getAllSeries().find(s => s._id === activeTab);
     return series?.subjects || [];
   };
+  const fixedForActive = getAllSeries().find((s) => s._id === activeTab);
+  const activeSeriesType = fixedForActive?.seriesType;
+  const getSyllabusLabel = (option: '100%' | '50%' | '30%') => {
+    if (option === '100%') return '100% (Full Syllabus)';
+    if (option === '50%') return '50% (Half Syllabus)';
+    if (option === '30%') return activeSeriesType === 'S3' || activeSeriesType === 'S4' ? 'Chapterwise' : '30% (Quick Revision)';
+    return option;
+  };
+  const availableSubjectsForActive = getAvailableSubjects();
+  const fixedSeriesCountForActive = Number((fixedForActive as any)?.pricing?.seriesCount || 2);
+  const papersPerSubjectConfig: Record<string, number> =
+    ((fixedForActive as any)?.pricing?.papersPerSubject as Record<string, number>) ||
+    ((fixedForActive as any)?.papersPerSubject as Record<string, number>) ||
+    {};
+  const maxPapersForActive = (() => {
+    const counts = availableSubjectsForActive
+      .map((subject) => Number(papersPerSubjectConfig?.[subject] || 0))
+      .filter((count) => Number.isFinite(count) && count > 0);
+    if (counts.length > 0) return Math.max(...counts);
+    if (activeSeriesType === 'S2') return 2;
+    if (activeSeriesType === 'S3') return 5;
+    if (activeSeriesType === 'S4') return 8;
+    return 1;
+  })();
 
   const addHighlight = () => {
     const highlights = currentSeries?.highlights || [];
@@ -333,9 +358,9 @@ const SubadminTestSeriesInter = () => {
         return;
       }
 
-      const effectiveSyllabusPercentage = activeTab === 'inter-s2'
+      const effectiveSyllabusPercentage = activeSeriesType === 'S2'
         ? '50%'
-        : activeTab === 'inter-s3'
+        : activeSeriesType === 'S3'
           ? '30%'
           : paperForm.syllabusPercentage;
 
@@ -346,7 +371,7 @@ const SubadminTestSeriesInter = () => {
       formData.append('paperType', paperForm.paperType);
       formData.append('paperNumber', String(paperForm.paperNumber));
       formData.append('syllabusPercentage', effectiveSyllabusPercentage);
-      if (activeTab === 'inter-s1') {
+      if (activeSeriesType === 'S1') {
         formData.append('series', paperForm.series);
       }
       formData.append('availabilityDate', paperForm.availabilityDate);
@@ -360,7 +385,7 @@ const SubadminTestSeriesInter = () => {
         await fetchPapersForSeries(activeTab);
         setPaperForm({
           group: 'Group 1',
-          subject: 'Advance accounting',
+          subject: availableSubjectsForActive[0] || 'Advance accounting',
           paperType: 'question',
           paperNumber: 1,
           syllabusPercentage: getDefaultSyllabusForTab(activeTab),
@@ -398,12 +423,18 @@ const SubadminTestSeriesInter = () => {
   };
 
   useEffect(() => {
+    const subjects = getAllSeries().find((s) => s._id === activeTab)?.subjects || [];
     setPaperForm((prev) => ({
       ...prev,
+      subject: subjects[0] || prev.subject,
       syllabusPercentage: getDefaultSyllabusForTab(activeTab),
       paperNumber: 1,
       series: 'series1',
     }));
+  }, [activeTab]);
+
+  useEffect(() => {
+    fetchPapersForSeries(activeTab);
   }, [activeTab]);
 
   return (
@@ -524,39 +555,160 @@ const SubadminTestSeriesInter = () => {
                   </div>
                 )}
 
-                <div className="mt-6">
-                  <h3 className="text-lg font-medium mb-2">Paper Management</h3>
-                  <div className="mb-3">
-                    <label className="block text-sm">Subject</label>
-                    <select value={paperForm.subject} onChange={(e)=>setPaperForm({...paperForm, subject: e.target.value})} className="border p-2 rounded w-64">
-                      {getAvailableSubjects().map((sub:any)=> (
-                        <option key={sub} value={sub}>{subjectNames[sub]||sub}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="mb-3">
-                    <label className="block text-sm">Paper File</label>
-                    <input id="paper-file-input" type="file" className="mt-2" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={handleUploadPaper} disabled={uploadingPaper}>{uploadingPaper? 'Uploading...' : 'Upload Paper'}</Button>
-                    <Button variant="ghost" onClick={()=>fetchPapersForSeries(activeTab)}>Refresh Papers</Button>
-                  </div>
+                <div className="mt-6 space-y-4">
+                  <h3 className="text-lg font-medium">Paper Management</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Upload question papers, suggested answers and evaluated sheets for the selected CA Inter series.
+                  </p>
 
-                  <div className="mt-4">
-                    <h4 className="font-medium">Existing Papers</h4>
-                    {papers.length===0 && <div className="text-sm text-muted-foreground">No papers uploaded yet</div>}
-                    {papers.map(p=> (
-                      <div key={p._id} className="border rounded p-2 flex items-center justify-between mt-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Upload {activeSeriesType} Paper</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {activeSeriesType === 'S1' && (
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Series</label>
+                            <select
+                              value={paperForm.series}
+                              onChange={(e) => setPaperForm({ ...paperForm, series: e.target.value })}
+                              className="w-full p-2 border rounded"
+                            >
+                              {Array.from({ length: fixedSeriesCountForActive }, (_, i) => (
+                                <option key={i} value={`series${i + 1}`}>Series {i + 1}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                         <div>
-                          <div className="font-medium">{p.subject} - {p.paperNumber}</div>
-                          <div className="text-sm text-muted-foreground">{p.fileName}</div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="destructive" onClick={()=>handleDeletePaper(p._id)}><Trash2 size={14} /></Button>
+                          <label className="block text-sm font-medium mb-2">Subject</label>
+                          <select
+                            value={paperForm.subject}
+                            onChange={(e) => setPaperForm({ ...paperForm, subject: e.target.value })}
+                            className="w-full p-2 border rounded"
+                          >
+                            {availableSubjectsForActive.map((subject) => (
+                              <option key={subject} value={subject}>
+                                {subject} ({subjectNames[subject] || subject})
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
-                    ))}
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Paper Type</label>
+                          <select
+                            value={paperForm.paperType}
+                            onChange={(e) => setPaperForm({ ...paperForm, paperType: e.target.value as any })}
+                            className="w-full p-2 border rounded"
+                          >
+                            <option value="question">Question Paper</option>
+                            <option value="suggested">Suggested Answers</option>
+                            <option value="evaluated">Evaluated Sheet</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Paper Number</label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max={String(maxPapersForActive)}
+                            value={paperForm.paperNumber}
+                            onChange={(e) => {
+                              const parsed = Number(e.target.value) || 1;
+                              const bounded = Math.max(1, Math.min(maxPapersForActive, parsed));
+                              setPaperForm({ ...paperForm, paperNumber: bounded });
+                            }}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            {activeSeriesType}: {maxPapersForActive} papers per subject
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Syllabus Coverage</label>
+                          <select
+                            value={paperForm.syllabusPercentage}
+                            onChange={(e) => setPaperForm({ ...paperForm, syllabusPercentage: e.target.value as any })}
+                            className="w-full p-2 border rounded"
+                          >
+                            {(activeSeriesType === 'S1'
+                              ? ['100%']
+                              : activeSeriesType === 'S2'
+                                ? ['50%']
+                                : activeSeriesType === 'S3'
+                                  ? ['30%']
+                                  : ['100%', '50%', '30%']
+                            ).map((option) => (
+                              <option key={option} value={option}>
+                                {getSyllabusLabel(option as '100%' | '50%' | '30%')}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Paper File (PDF or Word)</label>
+                        <input
+                          id="paper-file-input"
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          className="w-full p-2 border rounded"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Availability Date</label>
+                        <Input
+                          type="date"
+                          value={paperForm.availabilityDate}
+                          onChange={(e) => setPaperForm({ ...paperForm, availabilityDate: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button onClick={handleUploadPaper} disabled={uploadingPaper}>
+                          {uploadingPaper ? 'Uploading...' : 'Upload Paper'}
+                        </Button>
+                        <Button variant="ghost" onClick={() => fetchPapersForSeries(activeTab)}>
+                          Refresh Papers
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div>
+                    <h4 className="font-medium mb-2">Existing Papers</h4>
+                    {papers.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No papers uploaded yet</div>
+                    ) : (
+                      papers.map((p) => (
+                        <div key={p._id} className="border rounded p-3 flex items-center justify-between mt-2">
+                          <div>
+                            <div className="font-medium">{p.subject} - Paper {p.paperNumber}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {p.paperType === 'question' ? 'Question Paper' : p.paperType === 'suggested' ? 'Suggested Answers' : 'Evaluated Sheet'}
+                              {' - '}
+                              {p.fileName}
+                            </div>
+                            {p.series && <div className="text-xs text-muted-foreground">Series: {p.series}</div>}
+                          </div>
+                          <div className="flex gap-2">
+                            {p.publicFileUrl && (
+                              <Button size="sm" variant="outline" onClick={() => window.open(p.publicFileUrl, '_blank')}>
+                                <Download size={14} />
+                              </Button>
+                            )}
+                            <Button size="sm" variant="destructive" onClick={() => handleDeletePaper(p._id)}>
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 

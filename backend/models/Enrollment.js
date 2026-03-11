@@ -27,6 +27,10 @@ const enrollmentSchema = new mongoose.Schema(
       type: [String], // Store array of subject codes like ['FR', 'AFM']
       default: [],
     },
+    pendingPurchasedSubjects: {
+      type: [String], // Temporary subjects during in-progress add-on payment for test series
+      default: [],
+    },
     mentorshipPapers: {
       type: [String], // Store array of paper IDs like ['s1_fr_p1', 's1_afm_p1']
       default: [],

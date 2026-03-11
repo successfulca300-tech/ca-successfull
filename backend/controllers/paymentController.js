@@ -7,6 +7,113 @@ import Book from '../models/Book.js';
 import Cart from '../models/Cart.js';
 import mongoose from 'mongoose';
 
+const getSeriesTypeLabel = (seriesType, examLevel = 'final') => {
+  if (seriesType === 'S1') return 'Full Syllabus';
+  if (seriesType === 'S2') return '50% Syllabus';
+  if (seriesType === 'S3') return examLevel === 'inter' ? 'Chapterwise' : '30% Syllabus';
+  return 'CA Successful Specials';
+};
+
+const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const parseFixedSeriesIdentifier = (value) => {
+  const raw = String(value || '').trim();
+  const lower = raw.toLowerCase();
+  if (!lower) {
+    return { raw, lower, seriesType: null, examLevel: 'final', fixedKey: null };
+  }
+
+  const parts = lower.split('-').filter(Boolean);
+  const seriesToken = parts.length > 0 ? parts[parts.length - 1] : lower;
+  const seriesType = ['s1', 's2', 's3', 's4'].includes(seriesToken) ? seriesToken.toUpperCase() : null;
+  const examLevel = lower.startsWith('inter-') ? 'inter' : 'final';
+  const fixedKey = seriesType ? lower : null;
+
+  return { raw, lower, seriesType, examLevel, fixedKey };
+};
+
+const resolveTestSeriesFromIdentifier = async (identifier, options = {}) => {
+  const { createIfMissing = false, createdBy = null } = options;
+  const parsed = parseFixedSeriesIdentifier(identifier);
+  let testSeries = null;
+
+  if (mongoose.Types.ObjectId.isValid(identifier)) {
+    testSeries = await TestSeries.findById(identifier);
+    if (testSeries) return { testSeries, parsed };
+  }
+
+  if (parsed.fixedKey) {
+    testSeries = await TestSeries.findOne({
+      fixedKey: { $regex: `^${escapeRegex(parsed.fixedKey)}$`, $options: 'i' },
+    });
+  }
+
+  if (!testSeries && parsed.seriesType) {
+    testSeries = await TestSeries.findOne({
+      seriesType: parsed.seriesType,
+      examLevel: parsed.examLevel,
+    });
+  }
+
+  if (!testSeries && parsed.seriesType) {
+    testSeries = await TestSeries.findOne({ seriesType: parsed.seriesType });
+  }
+
+  if (!testSeries && createIfMissing && parsed.seriesType) {
+    testSeries = await TestSeries.create({
+      fixedKey: parsed.fixedKey || undefined,
+      title: `${parsed.examLevel === 'inter' ? 'CA Inter' : 'CA Final'} Test Series ${parsed.seriesType}`,
+      seriesType: parsed.seriesType,
+      seriesTypeLabel: getSeriesTypeLabel(parsed.seriesType, parsed.examLevel),
+      examLevel: parsed.examLevel,
+      category: null,
+      createdBy: createdBy || null,
+      publishStatus: 'published',
+      isActive: true,
+    });
+  }
+
+  return { testSeries, parsed };
+};
+
+const buildTestSeriesEnrollmentCandidates = (identifier, testSeries, parsed) => {
+  const values = [];
+  const normalizedInput = String(identifier || '').trim().toLowerCase();
+  const isInterScoped = (parsed?.fixedKey || normalizedInput).startsWith('inter-');
+
+  if (testSeries?._id) values.push(String(testSeries._id));
+  if (normalizedInput) values.push(normalizedInput);
+  if (parsed?.fixedKey) values.push(parsed.fixedKey);
+  if (parsed?.seriesType && !isInterScoped) values.push(parsed.seriesType.toLowerCase(), parsed.seriesType);
+
+  const unique = Array.from(new Set(values.filter(Boolean)));
+  return unique.map((value) => {
+    if (mongoose.Types.ObjectId.isValid(value)) return new mongoose.Types.ObjectId(value);
+    return value;
+  });
+};
+
+const normalizeSubjectToken = (value) => String(value || '').trim().toLowerCase();
+
+const uniqueSubjectTokens = (subjects = []) => {
+  if (!Array.isArray(subjects)) return [];
+  return Array.from(
+    new Set(
+      subjects
+        .map((subject) => String(subject || '').trim())
+        .filter(Boolean)
+    )
+  );
+};
+
+const getUnpurchasedSubjects = (requestedSubjects = [], ownedSubjects = []) => {
+  const requested = uniqueSubjectTokens(requestedSubjects);
+  const ownedSet = new Set(
+    uniqueSubjectTokens(ownedSubjects).map((subject) => normalizeSubjectToken(subject))
+  );
+  return requested.filter((subject) => !ownedSet.has(normalizeSubjectToken(subject)));
+};
+
 function getRazorpayInstance() {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -29,6 +136,8 @@ export const createOrder = async (req, res) => {
     const resourceType = courseId ? 'course' : mentorshipId ? 'mentorship' : testSeriesId ? 'testseries' : bookId ? 'book' : null;
     const resourceId = courseId || mentorshipId || testSeriesId || bookId;
     if (!resourceType || !resourceId || amount === undefined) return res.status(400).json({ message: 'resource id and amount required' });
+    let resolvedTestSeries = null;
+    let parsedTestSeries = null;
 
     // Validate amount
     if (typeof amount !== 'number' || amount <= 0) {
@@ -40,16 +149,20 @@ export const createOrder = async (req, res) => {
       const course = await Course.findById(resourceId);
       if (!course) return res.status(404).json({ message: 'Course not found' });
     } else if (resourceType === 'testseries') {
-      // Try to find testSeries for validation, but don't fail if not found (may be shorthand)
-      let testSeries = null;
-      if (mongoose.Types.ObjectId.isValid(resourceId)) {
-        testSeries = await TestSeries.findById(resourceId);
+      const resolved = await resolveTestSeriesFromIdentifier(resourceId, {
+        createIfMissing: false,
+      });
+      resolvedTestSeries = resolved.testSeries;
+      parsedTestSeries = resolved.parsed;
+      if (!resolvedTestSeries && !parsedTestSeries?.seriesType) {
+        return res.status(404).json({ message: 'Test series not found' });
       }
-      if (!testSeries) {
-        const seriesType = resourceId.toUpperCase();
-        testSeries = await TestSeries.findOne({ seriesType });
-      }
-      console.log('[Payment] TestSeries lookup:', testSeries ? `Found: ${testSeries.title}` : `Using provided ID as-is: ${resourceId}`);
+      console.log(
+        '[Payment] TestSeries lookup:',
+        resolvedTestSeries
+          ? `Found: ${resolvedTestSeries.title} (${resolvedTestSeries._id})`
+          : `Using shorthand ID: ${String(resourceId || '').toLowerCase()}`
+      );
     } else if (resourceType === 'book') {
       const bk = await Book.findById(resourceId);
       if (!bk) return res.status(404).json({ message: 'Book not found' });
@@ -66,15 +179,50 @@ export const createOrder = async (req, res) => {
     if (resourceType === 'mentorship') enrollmentQuery.mentorshipId = String(resourceId);
     if (resourceType === 'book') enrollmentQuery.bookId = resourceId;
     if (resourceType === 'testseries') {
-      let normalizedTestSeriesId = resourceId;
-      if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
-        normalizedTestSeriesId = resourceId.toLowerCase();
+      const candidates = buildTestSeriesEnrollmentCandidates(resourceId, resolvedTestSeries, parsedTestSeries);
+      if (candidates.length > 1) {
+        enrollmentQuery.$or = candidates.map((candidate) => ({ testSeriesId: candidate }));
+      } else if (candidates.length === 1) {
+        enrollmentQuery.testSeriesId = candidates[0];
       }
-      enrollmentQuery.testSeriesId = normalizedTestSeriesId;
     }
 
     let enrollment = await Enrollment.findOne(enrollmentQuery);
-    if (enrollment && enrollment.paymentStatus === 'paid') {
+    if (enrollment && resourceType === 'testseries' && resolvedTestSeries && String(enrollment.testSeriesId) !== String(resolvedTestSeries._id)) {
+      // Normalize legacy shorthand rows to ObjectId where possible.
+      const duplicate = await Enrollment.findOne({
+        userId: req.user._id,
+        testSeriesId: resolvedTestSeries._id,
+        _id: { $ne: enrollment._id },
+      });
+      if (!duplicate) {
+        enrollment.testSeriesId = resolvedTestSeries._id;
+        await enrollment.save();
+      }
+    }
+    let testSeriesAddonPurchase = false;
+    let testSeriesSubjectsToPurchase = uniqueSubjectTokens(purchasedSubjects);
+    if (resourceType === 'testseries' && enrollment && enrollment.paymentStatus === 'paid') {
+      const alreadyPurchasedSubjects = uniqueSubjectTokens(enrollment.purchasedSubjects);
+      // Legacy rows with empty purchasedSubjects mean full access was already bought.
+      if (alreadyPurchasedSubjects.length === 0) {
+        return res.status(409).json({ message: 'You have already purchased this plan/resource.' });
+      }
+
+      const unpurchasedSubjects = getUnpurchasedSubjects(
+        testSeriesSubjectsToPurchase,
+        alreadyPurchasedSubjects
+      );
+
+      if (unpurchasedSubjects.length === 0) {
+        return res.status(409).json({ message: 'You have already purchased this plan/resource.' });
+      }
+
+      testSeriesAddonPurchase = true;
+      testSeriesSubjectsToPurchase = unpurchasedSubjects;
+      console.log('[Payment] Allowing test series add-on purchase for subjects:', testSeriesSubjectsToPurchase);
+    }
+    if (enrollment && enrollment.paymentStatus === 'paid' && !(resourceType === 'testseries' && testSeriesAddonPurchase)) {
       return res.status(409).json({ message: 'You have already purchased this plan/resource.' });
     }
 
@@ -93,33 +241,21 @@ export const createOrder = async (req, res) => {
       }
     }
     if (resourceType === 'testseries') {
-      // Prefer storing DB ObjectId if TestSeries exists, else fall back to normalized shorthand string
-      let storeTestSeriesId = resourceId;
-      let testSeriesRecord = null;
-      if (mongoose.Types.ObjectId.isValid(resourceId)) {
-        testSeriesRecord = await TestSeries.findById(resourceId);
-      }
-      if (!testSeriesRecord) {
-        const st = String(resourceId || '').toUpperCase();
-        if (['S1','S2','S3','S4'].includes(st)) {
-          testSeriesRecord = await TestSeries.findOne({ seriesType: st });
-        }
-      }
-
-      if (testSeriesRecord) {
-        storeTestSeriesId = testSeriesRecord._id;
-      } else if (resourceId && typeof resourceId === 'string' && !mongoose.Types.ObjectId.isValid(resourceId)) {
-        // Normalize to lowercase shorthand for legacy compatibility
-        storeTestSeriesId = resourceId.toLowerCase();
-      }
-
+      const storeTestSeriesId = resolvedTestSeries?._id || parsedTestSeries?.fixedKey || String(resourceId || '').toLowerCase();
       createObj.testSeriesId = storeTestSeriesId;
-      console.log('[Payment] Storing testSeriesId in enrollment:', storeTestSeriesId, '(resolved record id:', testSeriesRecord?._id || null, ')');
+      console.log('[Payment] Storing testSeriesId in enrollment:', storeTestSeriesId, '(resolved record id:', resolvedTestSeries?._id || null, ')');
 
-      if (purchasedSubjects && Array.isArray(purchasedSubjects) && purchasedSubjects.length > 0) {
-        createObj.purchasedSubjects = purchasedSubjects;
-        console.log('[Payment] Saving purchasedSubjects to enrollment:', purchasedSubjects);
+      if (testSeriesAddonPurchase) {
+        // Keep existing paid access intact; merge these only after successful payment verification.
+        createObj.paymentStatus = 'paid';
+        createObj.pendingPurchasedSubjects = testSeriesSubjectsToPurchase;
+        console.log('[Payment] Saving pendingPurchasedSubjects to enrollment:', testSeriesSubjectsToPurchase);
+      } else if (testSeriesSubjectsToPurchase.length > 0) {
+        createObj.pendingPurchasedSubjects = [];
+        createObj.purchasedSubjects = testSeriesSubjectsToPurchase;
+        console.log('[Payment] Saving purchasedSubjects to enrollment:', testSeriesSubjectsToPurchase);
       } else {
+        createObj.pendingPurchasedSubjects = [];
         console.log('[Payment] WARNING: No purchasedSubjects received or invalid format');
       }
     }
@@ -140,6 +276,7 @@ export const createOrder = async (req, res) => {
       mentorshipId: enrollment.mentorshipId,
       testSeriesId: enrollment.testSeriesId,
       purchasedSubjects: enrollment.purchasedSubjects,
+      pendingPurchasedSubjects: enrollment.pendingPurchasedSubjects,
       paymentStatus: enrollment.paymentStatus 
     });
 
@@ -157,21 +294,7 @@ export const createOrder = async (req, res) => {
       notes: { enrollmentId: enrollment._id.toString(), resourceType, resourceId: resourceId.toString(), userId: req.user._id.toString() },
     };
 
-    let order;
-    try {
-      order = await instance.orders.create(options);
-    } catch (rpErr) {
-      console.error('Razorpay order creation failed:', rpErr);
-      const statusCode = rpErr && rpErr.statusCode ? rpErr.statusCode : null;
-      const razorErrCode = rpErr && rpErr.error && rpErr.error.code ? rpErr.error.code : null;
-      const razorErrDesc = rpErr && rpErr.error && rpErr.error.description ? rpErr.error.description : null;
-
-      if (statusCode === 401 || razorErrCode === 'BAD_REQUEST_ERROR' || (razorErrDesc && razorErrDesc.toLowerCase().includes('authentication'))) {
-        return res.status(502).json({ message: 'Razorpay authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET configuration.', details: { statusCode, razorErrCode, razorErrDesc } });
-      }
-
-      return res.status(500).json({ message: 'Unable to create Razorpay order', error: rpErr && rpErr.message ? rpErr.message : String(rpErr) });
-    }
+    const order = await instance.orders.create(options);
 
     return res.json({ mode: 'razorpay', keyId: process.env.RAZORPAY_KEY_ID, order, enrollmentId: enrollment._id });
   } catch (err) {
@@ -208,12 +331,21 @@ export const verifyPayment = async (req, res) => {
     console.log('[Payment] Enrollment before payment update:', { 
       id: enrollment._id, 
       purchasedSubjects: enrollment.purchasedSubjects,
+      pendingPurchasedSubjects: enrollment.pendingPurchasedSubjects,
       paymentStatus: enrollment.paymentStatus 
     });
 
     enrollment.paymentStatus = 'paid';
     enrollment.paymentId = razorpay_payment_id;
     enrollment.transactionDate = new Date();
+    const pendingPurchasedSubjects = uniqueSubjectTokens(enrollment.pendingPurchasedSubjects);
+    if (enrollment.testSeriesId && pendingPurchasedSubjects.length > 0) {
+      enrollment.purchasedSubjects = uniqueSubjectTokens([
+        ...(Array.isArray(enrollment.purchasedSubjects) ? enrollment.purchasedSubjects : []),
+        ...pendingPurchasedSubjects,
+      ]);
+      enrollment.pendingPurchasedSubjects = [];
+    }
     if (enrollment.testSeriesId && !enrollment.expiryDate) {
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + 60);
@@ -224,6 +356,7 @@ export const verifyPayment = async (req, res) => {
     console.log('[Payment] Enrollment after payment update:', { 
       id: enrollment._id, 
       purchasedSubjects: enrollment.purchasedSubjects,
+      pendingPurchasedSubjects: enrollment.pendingPurchasedSubjects,
       paymentStatus: enrollment.paymentStatus 
     });
 

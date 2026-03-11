@@ -6,6 +6,116 @@ import Book from '../models/Book.js';
 import Cart from '../models/Cart.js';
 import { validationResult } from 'express-validator';
 
+const getSeriesTypeLabel = (seriesType, examLevel = 'final') => {
+  if (seriesType === 'S1') return 'Full Syllabus';
+  if (seriesType === 'S2') return '50% Syllabus';
+  if (seriesType === 'S3') return examLevel === 'inter' ? 'Chapterwise' : '30% Syllabus';
+  return 'CA Successful Specials';
+};
+
+const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const parseFixedSeriesIdentifier = (value) => {
+  const raw = String(value || '').trim();
+  const lower = raw.toLowerCase();
+  if (!lower) {
+    return { raw, lower, seriesType: null, examLevel: 'final', fixedKey: null };
+  }
+
+  const parts = lower.split('-').filter(Boolean);
+  const seriesToken = parts.length > 0 ? parts[parts.length - 1] : lower;
+  const seriesType = ['s1', 's2', 's3', 's4'].includes(seriesToken) ? seriesToken.toUpperCase() : null;
+  const examLevel = lower.startsWith('inter-') ? 'inter' : 'final';
+  const fixedKey = seriesType ? lower : null;
+
+  return { raw, lower, seriesType, examLevel, fixedKey };
+};
+
+const resolveTestSeriesFromIdentifier = async (identifier, options = {}) => {
+  const { createIfMissing = false, createdBy = null } = options;
+  const parsed = parseFixedSeriesIdentifier(identifier);
+  let testSeries = null;
+
+  if (mongoose.Types.ObjectId.isValid(identifier)) {
+    testSeries = await TestSeries.findById(identifier);
+    if (testSeries) return { testSeries, parsed };
+  }
+
+  if (parsed.fixedKey) {
+    testSeries = await TestSeries.findOne({
+      fixedKey: { $regex: `^${escapeRegex(parsed.fixedKey)}$`, $options: 'i' },
+    });
+  }
+
+  if (!testSeries && parsed.seriesType) {
+    testSeries = await TestSeries.findOne({
+      seriesType: parsed.seriesType,
+      examLevel: parsed.examLevel,
+    });
+  }
+
+  // Legacy fallback for records without examLevel/fixedKey.
+  if (!testSeries && parsed.seriesType) {
+    testSeries = await TestSeries.findOne({ seriesType: parsed.seriesType });
+  }
+
+  if (!testSeries && createIfMissing && parsed.seriesType) {
+    testSeries = await TestSeries.create({
+      fixedKey: parsed.fixedKey || undefined,
+      title: `${parsed.examLevel === 'inter' ? 'CA Inter' : 'CA Final'} Test Series ${parsed.seriesType}`,
+      seriesType: parsed.seriesType,
+      seriesTypeLabel: getSeriesTypeLabel(parsed.seriesType, parsed.examLevel),
+      examLevel: parsed.examLevel,
+      category: null,
+      createdBy: createdBy || null,
+      publishStatus: 'published',
+      isActive: true,
+    });
+  }
+
+  return { testSeries, parsed };
+};
+
+const buildTestSeriesEnrollmentCandidates = (identifier, testSeries, parsed) => {
+  const values = [];
+  const normalizedInput = String(identifier || '').trim().toLowerCase();
+  const isInterScoped = (parsed?.fixedKey || normalizedInput).startsWith('inter-');
+
+  if (testSeries?._id) values.push(String(testSeries._id));
+  if (normalizedInput) values.push(normalizedInput);
+  if (parsed?.fixedKey) values.push(parsed.fixedKey);
+  if (parsed?.seriesType && !isInterScoped) {
+    values.push(parsed.seriesType.toLowerCase(), parsed.seriesType);
+  }
+
+  const unique = Array.from(new Set(values.filter(Boolean)));
+  return unique.map((value) => {
+    if (mongoose.Types.ObjectId.isValid(value)) return new mongoose.Types.ObjectId(value);
+    return value;
+  });
+};
+
+const normalizeSubjectToken = (value) => String(value || '').trim().toLowerCase();
+
+const uniqueSubjectTokens = (subjects = []) => {
+  if (!Array.isArray(subjects)) return [];
+  return Array.from(
+    new Set(
+      subjects
+        .map((subject) => String(subject || '').trim())
+        .filter(Boolean)
+    )
+  );
+};
+
+const getUnpurchasedSubjects = (requestedSubjects = [], ownedSubjects = []) => {
+  const requested = uniqueSubjectTokens(requestedSubjects);
+  const ownedSet = new Set(
+    uniqueSubjectTokens(ownedSubjects).map((subject) => normalizeSubjectToken(subject))
+  );
+  return requested.filter((subject) => !ownedSet.has(normalizeSubjectToken(subject)));
+};
+
 // @desc    Get user enrollments
 // @route   GET /api/enrollments
 // @access  Private
@@ -111,38 +221,22 @@ export const createEnrollment = async (req, res) => {
 
     let resource;
     let resourceType = null;
+    let parsedSeries = null;
 
     if (courseId) {
       resource = await Course.findById(courseId);
       resourceType = 'course';
     } else if (testSeriesId) {
-      // Resolve testSeriesId that may be a shorthand like 's1' to a DB TestSeries
-      if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
-        resource = await TestSeries.findById(testSeriesId);
-      } else {
-        const seriesType = String(testSeriesId || '').toUpperCase();
-        if (['S1','S2','S3','S4'].includes(seriesType)) {
-          resource = await TestSeries.findOne({ seriesType });
-          if (!resource) {
-            resource = await TestSeries.create({
-              title: `Test Series ${seriesType}`,
-              seriesType,
-              seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
-              category: null,
-              createdBy: null,
-              publishStatus: 'published',
-              isActive: true,
-            });
-          }
-        }
-      }
+      const resolved = await resolveTestSeriesFromIdentifier(testSeriesId, { createIfMissing: false });
+      resource = resolved.testSeries;
+      parsedSeries = resolved.parsed;
       resourceType = 'testseries';
     } else if (bookId) {
       resource = await Book.findById(bookId);
       resourceType = 'book';
     }
 
-    if (!resource) {
+    if (!resource && !(resourceType === 'testseries' && parsedSeries?.seriesType)) {
       return res.status(404).json({ message: 'Resource not found' });
     }
 
@@ -152,13 +246,37 @@ export const createEnrollment = async (req, res) => {
     if (resourceType === 'course') {
       existingQuery.courseId = courseId;
     } else if (resourceType === 'testseries') {
-      existingQuery.testSeriesId = testSeriesId;
+      const candidates = buildTestSeriesEnrollmentCandidates(testSeriesId, resource, parsedSeries);
+      if (candidates.length > 1) {
+        existingQuery.$or = candidates.map((candidate) => ({ testSeriesId: candidate }));
+      } else if (candidates.length === 1) {
+        existingQuery.testSeriesId = candidates[0];
+      } else {
+        existingQuery.testSeriesId = testSeriesId;
+      }
     } else if (resourceType === 'book') {
       existingQuery.bookId = bookId;
     }
 
     let existingEnrollment = await Enrollment.findOne(existingQuery);
     if (existingEnrollment && existingEnrollment.paymentStatus === 'paid') {
+      if (resourceType === 'testseries') {
+        const requestedSubjects = uniqueSubjectTokens(req.body?.purchasedSubjects);
+        const alreadyPurchasedSubjects = uniqueSubjectTokens(existingEnrollment.purchasedSubjects);
+
+        // Legacy rows with empty purchasedSubjects represent full access.
+        if (alreadyPurchasedSubjects.length > 0 && requestedSubjects.length > 0) {
+          const newSubjects = getUnpurchasedSubjects(requestedSubjects, alreadyPurchasedSubjects);
+          if (newSubjects.length > 0) {
+            existingEnrollment.purchasedSubjects = uniqueSubjectTokens([
+              ...alreadyPurchasedSubjects,
+              ...newSubjects,
+            ]);
+            await existingEnrollment.save();
+          }
+        }
+      }
+
       // If already enrolled and paid in THIS specific resource, return the existing enrollment (200)
       const populated = await Enrollment.findById(existingEnrollment._id)
         .populate('courseId', 'title price thumbnail')
@@ -176,6 +294,16 @@ export const createEnrollment = async (req, res) => {
     }
     
     if (existingEnrollment) {
+      if (resourceType === 'testseries') {
+        const requestedSubjects = uniqueSubjectTokens(req.body?.purchasedSubjects);
+        if (requestedSubjects.length > 0) {
+          existingEnrollment.purchasedSubjects = uniqueSubjectTokens([
+            ...(Array.isArray(existingEnrollment.purchasedSubjects) ? existingEnrollment.purchasedSubjects : []),
+            ...requestedSubjects,
+          ]);
+        }
+      }
+
       // If enrollment exists but not paid, upgrade it when caller requests paid
       if (req.body && (req.body.paymentStatus === 'paid' || req.body.paymentStatus === 'completed')) {
         existingEnrollment.paymentStatus = 'paid';
@@ -227,7 +355,7 @@ export const createEnrollment = async (req, res) => {
     };
     if (resourceType === 'course') createObj.courseId = courseId;
     if (resourceType === 'testseries') {
-      createObj.testSeriesId = resource._id; // store DB ObjectId reference
+      createObj.testSeriesId = resource?._id || parsedSeries?.fixedKey || String(testSeriesId || '').toLowerCase();
       if (req.body.purchasedSubjects && Array.isArray(req.body.purchasedSubjects) && req.body.purchasedSubjects.length > 0) {
         createObj.purchasedSubjects = req.body.purchasedSubjects;
       }
@@ -421,36 +549,14 @@ export const checkEnrollment = async (req, res) => {
     const query = { userId: req.user._id };
     if (courseId) query.courseId = courseId;
     if (testSeriesId) {
-      // Resolve shorthand to DB TestSeries ObjectId *or* allow legacy shorthand string match
-      if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
-        // Convert string id to ObjectId for accurate matching against stored ObjectIds
-        try {
-          // Prefer constructing with Mongoose Types
-          const oid = new mongoose.Types.ObjectId(testSeriesId);
-          query.$or = [{ testSeriesId: oid }, { testSeriesId: testSeriesId }];
-        } catch (e) {
-          try {
-            // Fallback: use underlying mongo ObjectId constructor
-            const oid = new mongoose.mongo.ObjectId(testSeriesId);
-            query.$or = [{ testSeriesId: oid }, { testSeriesId: testSeriesId }];
-          } catch (err) {
-            console.warn('[CheckEnrollment] Failed to construct ObjectId, falling back to string match for testSeriesId:', testSeriesId, err.message);
-            query.testSeriesId = testSeriesId;
-          }
-        }
+      const resolved = await resolveTestSeriesFromIdentifier(testSeriesId);
+      const candidates = buildTestSeriesEnrollmentCandidates(testSeriesId, resolved.testSeries, resolved.parsed);
+      if (candidates.length > 1) {
+        query.$or = candidates.map((candidate) => ({ testSeriesId: candidate }));
+      } else if (candidates.length === 1) {
+        query.testSeriesId = candidates[0];
       } else {
-        const seriesType = String(testSeriesId || '').toUpperCase();
-        if (['S1','S2','S3','S4'].includes(seriesType)) {
-          const ts = await TestSeries.findOne({ seriesType });
-          const shorthandLower = seriesType.toLowerCase();
-          if (ts) {
-            // Match either the DB ObjectId (new enrollments) or legacy shorthand string (older enrollments)
-            query.$or = [{ testSeriesId: ts._id }, { testSeriesId: shorthandLower }];
-          } else {
-            // No TS record found - check for shorthand string stored directly
-            query.testSeriesId = shorthandLower;
-          }
-        }
+        query.testSeriesId = String(testSeriesId || '').toLowerCase();
       }
     }
     if (bookId) query.bookId = bookId;

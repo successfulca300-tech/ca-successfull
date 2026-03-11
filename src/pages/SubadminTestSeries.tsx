@@ -106,8 +106,9 @@ const SubadminTestSeries = () => {
   });
 
   const getDefaultSyllabusForTab = (tab: string): '100%' | '50%' | '30%' => {
-    if (tab === 's2') return '50%';
-    if (tab === 's3') return '30%';
+    const selected = getAllSeries().find((s) => s._id === tab);
+    if (selected?.seriesType === 'S2') return '50%';
+    if (selected?.seriesType === 'S3') return '30%';
     return '100%';
   };
 
@@ -302,8 +303,32 @@ const SubadminTestSeries = () => {
   // Helpers for the selected fixed series
   const fixedForActive = getAllSeries().find(s => s._id === activeTab);
   const isS1Selected = fixedForActive?.seriesType === 'S1';
+  const activeSeriesType = fixedForActive?.seriesType;
+  const isInterActive = fixedForActive?._id?.startsWith('inter-') || false;
+  const isInterS3Active = isInterActive && activeSeriesType === 'S3';
+  const getSyllabusCoverageLabel = (value: string) => {
+    if (value === '30%' && isInterActive) return 'Chapterwise';
+    if (value === '100%') return '100% (Full Syllabus)';
+    if (value === '50%') return '50% (Half Syllabus)';
+    if (value === '30%') return '30% (Quick Revision)';
+    return value || 'N/A';
+  };
   const fixedSeriesCountForActive = (fixedForActive as any)?.pricing?.seriesCount || (fixedForActive?._id && fixedForActive._id.startsWith('inter-') ? 2 : 3);
   const availableSubjectsForActive = getAvailableSubjects();
+  const papersPerSubjectConfig: Record<string, number> =
+    ((fixedForActive as any)?.pricing?.papersPerSubject as Record<string, number>) ||
+    ((fixedForActive as any)?.papersPerSubject as Record<string, number>) ||
+    {};
+  const maxPapersForActive = (() => {
+    const subjectCounts = availableSubjectsForActive
+      .map((subject) => Number(papersPerSubjectConfig?.[subject] || 0))
+      .filter((count) => Number.isFinite(count) && count > 0);
+    if (subjectCounts.length > 0) return Math.max(...subjectCounts);
+    if (activeSeriesType === 'S2') return 2;
+    if (activeSeriesType === 'S3') return isInterActive ? 5 : 3;
+    if (activeSeriesType === 'S4') return isInterActive ? 8 : 6;
+    return 1;
+  })();
 
   const addHighlight = () => {
     const highlights = currentSeries?.highlights || [];
@@ -353,11 +378,12 @@ const SubadminTestSeries = () => {
       }
 
       // Create FormData for file upload
-      const effectiveSyllabusPercentage = activeTab === 's2'
-        ? '50%'
-        : activeTab === 's3'
-          ? '30%'
-          : paperForm.syllabusPercentage;
+      const effectiveSyllabusPercentage =
+        activeSeriesType === 'S2'
+          ? '50%'
+          : activeSeriesType === 'S3'
+            ? '30%'
+            : paperForm.syllabusPercentage;
 
       const formData = new FormData();
       formData.append('paper', file);
@@ -366,7 +392,7 @@ const SubadminTestSeries = () => {
       formData.append('paperType', paperForm.paperType);
       formData.append('paperNumber', String(paperForm.paperNumber));
       formData.append('syllabusPercentage', effectiveSyllabusPercentage);
-      if (activeTab === 's1') {
+      if (activeSeriesType === 'S1') {
         formData.append('series', paperForm.series);
       }
       formData.append('availabilityDate', paperForm.availabilityDate);
@@ -382,7 +408,7 @@ const SubadminTestSeries = () => {
         // Reset form
         setPaperForm({
           group: 'Group 1',
-          subject: 'FR',
+          subject: availableSubjectsForActive[0] || 'FR',
           paperType: 'question',
           paperNumber: 1,
           syllabusPercentage: getDefaultSyllabusForTab(activeTab),
@@ -427,8 +453,10 @@ const SubadminTestSeries = () => {
   }, [activeTab, expandedSeries]);
 
   useEffect(() => {
+    const subjects = getAllSeries().find((s) => s._id === activeTab)?.subjects || [];
     setPaperForm((prev) => ({
       ...prev,
+      subject: subjects[0] || prev.subject,
       syllabusPercentage: getDefaultSyllabusForTab(activeTab),
       paperNumber: 1,
       series: 'series1',
@@ -1019,7 +1047,7 @@ const SubadminTestSeries = () => {
                         </div>
                       )}
 
-                      {activeTab !== 's1' && (
+                      {!isS1Selected && (
                         <div className="border-t pt-6">
                           <h4 className="text-lg font-semibold mb-2">Upload Schedule</h4>
                           <p className="text-sm text-muted-foreground mb-6">
@@ -1083,7 +1111,7 @@ const SubadminTestSeries = () => {
 
                     {/* Paper Upload Section - Series Specific */}
                     <div className="space-y-6">
-                      {activeTab === 's1' && (
+                      {activeSeriesType === 'S1' && (
                         <>
                           <div>
                             <h4 className="text-lg font-semibold mb-4">Upload S1 Full Syllabus Test Papers</h4>
@@ -1194,12 +1222,12 @@ const SubadminTestSeries = () => {
                         </>
                       )}
 
-                      {activeTab === 's2' && (
+                      {activeSeriesType === 'S2' && (
                         <>
                           <div>
                             <h4 className="text-lg font-semibold mb-4">Upload S2 50% Syllabus Test Papers</h4>
                             <p className="text-sm text-muted-foreground mb-4">
-                              S2 has 2 test papers per subject (5 subjects total), each covering 50% of the syllabus
+                              S2 has {maxPapersForActive} test papers per subject ({availableSubjectsForActive.length} subjects total), each covering 50% of the syllabus
                             </p>
                           </div>
 
@@ -1217,11 +1245,11 @@ const SubadminTestSeries = () => {
                                     onChange={(e) => setPaperForm({ ...paperForm, subject: e.target.value })}
                                     className="w-full p-2 border rounded"
                                   >
-                                    <option value="FR">FR (Financial Reporting)</option>
-                                    <option value="AFM">AFM (Advanced Financial Management)</option>
-                                    <option value="Audit">Audit (Audit and Assurance)</option>
-                                    <option value="DT">DT (Direct Taxation)</option>
-                                    <option value="IDT">IDT (Indirect Taxation)</option>
+                                    {availableSubjectsForActive.map((subject) => (
+                                      <option key={subject} value={subject}>
+                                        {subject} ({subjectNames[subject] || subject})
+                                      </option>
+                                    ))}
                                   </select>
                                 </div>
                                 <div>
@@ -1229,11 +1257,15 @@ const SubadminTestSeries = () => {
                                   <Input
                                     type="number"
                                     min="1"
-                                    max="2"
+                                    max={String(maxPapersForActive)}
                                     value={paperForm.paperNumber}
-                                    onChange={(e) => setPaperForm({ ...paperForm, paperNumber: parseInt(e.target.value) })}
+                                    onChange={(e) => {
+                                      const parsed = Number(e.target.value) || 1;
+                                      const bounded = Math.max(1, Math.min(maxPapersForActive, parsed));
+                                      setPaperForm({ ...paperForm, paperNumber: bounded });
+                                    }}
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">S2: 2 papers per subject</p>
+                                  <p className="text-xs text-gray-500 mt-1">S2: {maxPapersForActive} papers per subject</p>
                                 </div>
                               </div>
 
@@ -1295,12 +1327,16 @@ const SubadminTestSeries = () => {
                         </>
                       )}
 
-                      {activeTab === 's3' && (
+                      {activeSeriesType === 'S3' && (
                         <>
                           <div>
-                            <h4 className="text-lg font-semibold mb-4">Upload S3 30% Syllabus Test Papers</h4>
+                            <h4 className="text-lg font-semibold mb-4">
+                              {isInterS3Active ? 'Upload S3 Chapterwise Test Papers' : 'Upload S3 30% Syllabus Test Papers'}
+                            </h4>
                             <p className="text-sm text-muted-foreground mb-4">
-                              S3 has 3 test papers per subject (5 subjects total), each covering 30% of the syllabus
+                              {isInterS3Active
+                                ? `S3 has ${maxPapersForActive} test papers per subject (${availableSubjectsForActive.length} subjects total), organized chapterwise`
+                                : `S3 has ${maxPapersForActive} test papers per subject (${availableSubjectsForActive.length} subjects total), each covering 30% of the syllabus`}
                             </p>
                           </div>
 
@@ -1318,11 +1354,11 @@ const SubadminTestSeries = () => {
                                     onChange={(e) => setPaperForm({ ...paperForm, subject: e.target.value })}
                                     className="w-full p-2 border rounded"
                                   >
-                                    <option value="FR">FR (Financial Reporting)</option>
-                                    <option value="AFM">AFM (Advanced Financial Management)</option>
-                                    <option value="Audit">Audit (Audit and Assurance)</option>
-                                    <option value="DT">DT (Direct Taxation)</option>
-                                    <option value="IDT">IDT (Indirect Taxation)</option>
+                                    {availableSubjectsForActive.map((subject) => (
+                                      <option key={subject} value={subject}>
+                                        {subject} ({subjectNames[subject] || subject})
+                                      </option>
+                                    ))}
                                   </select>
                                 </div>
                                 <div>
@@ -1330,11 +1366,15 @@ const SubadminTestSeries = () => {
                                   <Input
                                     type="number"
                                     min="1"
-                                    max="3"
+                                    max={String(maxPapersForActive)}
                                     value={paperForm.paperNumber}
-                                    onChange={(e) => setPaperForm({ ...paperForm, paperNumber: parseInt(e.target.value) })}
+                                    onChange={(e) => {
+                                      const parsed = Number(e.target.value) || 1;
+                                      const bounded = Math.max(1, Math.min(maxPapersForActive, parsed));
+                                      setPaperForm({ ...paperForm, paperNumber: bounded });
+                                    }}
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">S3: 3 papers per subject</p>
+                                  <p className="text-xs text-gray-500 mt-1">S3: {maxPapersForActive} papers per subject</p>
                                 </div>
                               </div>
 
@@ -1358,7 +1398,7 @@ const SubadminTestSeries = () => {
                                     onChange={(e) => setPaperForm({ ...paperForm, syllabusPercentage: e.target.value as any })}
                                     className="w-full p-2 border rounded"
                                   >
-                                    <option value="30%">30% (Quick Revision)</option>
+                                    <option value="30%">{isInterS3Active ? 'Chapterwise' : '30% (Quick Revision)'}</option>
                                   </select>
                                 </div>
                               </div>
@@ -1396,12 +1436,12 @@ const SubadminTestSeries = () => {
                         </>
                       )}
 
-                      {activeTab === 's4' && (
+                      {activeSeriesType === 'S4' && (
                         <>
                           <div>
                             <h4 className="text-lg font-semibold mb-4">Upload  Test Papers</h4>
                             <p className="text-sm text-muted-foreground mb-4">
-                              S4 has 6 test papers per subject (5 subjects total): 1 Full (100%) + 2 Half (50%) + 3 Quick (30%)
+                              S4 has {maxPapersForActive} test papers per subject ({availableSubjectsForActive.length} subjects total)
                             </p>
                           </div>
 
@@ -1419,11 +1459,11 @@ const SubadminTestSeries = () => {
                                     onChange={(e) => setPaperForm({ ...paperForm, subject: e.target.value })}
                                     className="w-full p-2 border rounded"
                                   >
-                                    <option value="FR">FR (Financial Reporting)</option>
-                                    <option value="AFM">AFM (Advanced Financial Management)</option>
-                                    <option value="Audit">Audit (Audit and Assurance)</option>
-                                    <option value="DT">DT (Direct Taxation)</option>
-                                    <option value="IDT">IDT (Indirect Taxation)</option>
+                                    {availableSubjectsForActive.map((subject) => (
+                                      <option key={subject} value={subject}>
+                                        {subject} ({subjectNames[subject] || subject})
+                                      </option>
+                                    ))}
                                   </select>
                                 </div>
                                 <div>
@@ -1431,11 +1471,15 @@ const SubadminTestSeries = () => {
                                   <Input
                                     type="number"
                                     min="1"
-                                    max="6"
+                                    max={String(maxPapersForActive)}
                                     value={paperForm.paperNumber}
-                                    onChange={(e) => setPaperForm({ ...paperForm, paperNumber: parseInt(e.target.value) })}
+                                    onChange={(e) => {
+                                      const parsed = Number(e.target.value) || 1;
+                                      const bounded = Math.max(1, Math.min(maxPapersForActive, parsed));
+                                      setPaperForm({ ...paperForm, paperNumber: bounded });
+                                    }}
                                   />
-                                  <p className="text-xs text-gray-500 mt-1">S4: 6 papers per subject</p>
+                                  <p className="text-xs text-gray-500 mt-1">S4: {maxPapersForActive} papers per subject</p>
                                 </div>
                               </div>
 
@@ -1461,7 +1505,7 @@ const SubadminTestSeries = () => {
                                   >
                                     <option value="100%">100% (Full Syllabus)</option>
                                     <option value="50%">50% (Half Syllabus)</option>
-                                    <option value="30%">30% (Quick Revision)</option>
+                                    <option value="30%">{isInterActive ? 'Chapterwise' : '30% (Quick Revision)'}</option>
                                   </select>
                                 </div>
                               </div>
@@ -1519,7 +1563,7 @@ const SubadminTestSeries = () => {
                                       {paper.subject} - Paper {paper.paperNumber}
                                     </p>
                                     <p className="text-sm text-gray-600">
-                                      {paper.paperType === 'question' ? 'Question Paper' : paper.paperType === 'suggested' ? 'Suggested Answers' : 'Evaluated Sheet'} - {paper.syllabusPercentage}
+                                      {paper.paperType === 'question' ? 'Question Paper' : paper.paperType === 'suggested' ? 'Suggested Answers' : 'Evaluated Sheet'} - {getSyllabusCoverageLabel(paper.syllabusPercentage)}
                                     </p>
                                     {paper.series && <p className="text-xs text-gray-500">Series: {paper.series}</p>}
                                   </div>

@@ -22,7 +22,19 @@ const testSeriesPaperSchema = new mongoose.Schema(
     // Subject info
     subject: {
       type: String,
-      enum: ['FR', 'AFM', 'Audit', 'DT', 'IDT'],
+      // Supports both CA Final and CA Inter subject sets.
+      enum: [
+        'FR',
+        'AFM',
+        'Audit',
+        'DT',
+        'IDT',
+        'Advance accounting',
+        'Corporate law',
+        'Taxation',
+        'Costing',
+        'FM SM',
+      ],
       required: true,
     },
     // Paper type

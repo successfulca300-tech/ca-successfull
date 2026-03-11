@@ -61,22 +61,73 @@ export const generateFileViewToken = async (req, res) => {
     // Helper to build flexible query for testSeries (match ObjectId or shorthand string)
     const buildTestSeriesQuery = async (tsParam) => {
       if (!tsParam) return { testSeriesId: tsParam };
+
+      const TestSeriesModel = (await import('../models/TestSeries.js')).default;
+      const addCandidate = (set, value) => {
+        if (!value) return;
+        const raw = String(value).trim();
+        if (!raw) return;
+        if (mongoose.Types.ObjectId.isValid(raw)) {
+          set.add(new mongoose.Types.ObjectId(raw));
+        } else {
+          set.add(raw);
+        }
+      };
+
+      const candidates = new Set();
+
       if (mongoose.Types.ObjectId.isValid(tsParam)) {
+        addCandidate(candidates, tsParam);
+        addCandidate(candidates, String(tsParam));
         try {
-          const oid = new mongoose.mongo.ObjectId(tsParam);
-          return { $or: [{ testSeriesId: oid }, { testSeriesId: String(tsParam) }] };
-        } catch (e) {
-          return { testSeriesId: String(tsParam) };
+          const ts = await TestSeriesModel.findById(tsParam).select('fixedKey seriesType');
+          if (ts?.fixedKey) addCandidate(candidates, String(ts.fixedKey).toLowerCase());
+          const isInterScoped = String(ts?.fixedKey || '').toLowerCase().startsWith('inter-');
+          if (ts?.seriesType && !isInterScoped) {
+            addCandidate(candidates, String(ts.seriesType).toLowerCase());
+            addCandidate(candidates, String(ts.seriesType).toUpperCase());
+          }
+        } catch (_) {}
+      } else {
+        const raw = String(tsParam || '').trim().toLowerCase();
+        const parts = raw.split('-').filter(Boolean);
+        const seriesToken = parts.length > 0 ? parts[parts.length - 1] : raw;
+        const seriesType = ['s1', 's2', 's3', 's4'].includes(seriesToken) ? seriesToken.toUpperCase() : null;
+        const examLevel = raw.startsWith('inter-') ? 'inter' : 'final';
+        const isInterScoped = raw.startsWith('inter-');
+        const escapedRaw = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        addCandidate(candidates, raw);
+
+        let ts = await TestSeriesModel.findOne({
+          fixedKey: { $regex: `^${escapedRaw}$`, $options: 'i' },
+        }).select('_id fixedKey seriesType');
+
+        if (!ts && seriesType) {
+          ts = await TestSeriesModel.findOne({ seriesType, examLevel }).select('_id fixedKey seriesType');
+        }
+        if (!ts && seriesType) {
+          ts = await TestSeriesModel.findOne({ seriesType }).select('_id fixedKey seriesType');
+        }
+
+        if (ts) {
+          addCandidate(candidates, ts._id);
+          if (ts.fixedKey) addCandidate(candidates, String(ts.fixedKey).toLowerCase());
+          const tsInterScoped = String(ts.fixedKey || '').toLowerCase().startsWith('inter-') || isInterScoped;
+          if (ts.seriesType && !tsInterScoped) {
+            addCandidate(candidates, String(ts.seriesType).toLowerCase());
+            addCandidate(candidates, String(ts.seriesType).toUpperCase());
+          }
+        } else if (seriesType && !isInterScoped) {
+          addCandidate(candidates, seriesType.toLowerCase());
+          addCandidate(candidates, seriesType.toUpperCase());
         }
       }
-      const seriesType = String(tsParam || '').toUpperCase();
-      if (['S1','S2','S3','S4'].includes(seriesType)) {
-        const ts = await (await import('../models/TestSeries.js')).default.findOne({ seriesType });
-        const shorthandLower = seriesType.toLowerCase();
-        if (ts) return { $or: [{ testSeriesId: ts._id }, { testSeriesId: shorthandLower }] };
-        return { testSeriesId: shorthandLower };
-      }
-      return { testSeriesId: tsParam };
+
+      const normalizedCandidates = Array.from(candidates);
+      if (normalizedCandidates.length === 0) return { testSeriesId: tsParam };
+      if (normalizedCandidates.length === 1) return { testSeriesId: normalizedCandidates[0] };
+      return { $or: normalizedCandidates.map((candidate) => ({ testSeriesId: candidate })) };
     };
 
     if (courseId) {

@@ -21,6 +21,98 @@ const normalizePaperForSeries = (paper, seriesType) => {
   return { ...paper, syllabusPercentage: normalized };
 };
 
+const getSeriesTypeLabel = (seriesType, examLevel = 'final') => {
+  if (seriesType === 'S1') return 'Full Syllabus';
+  if (seriesType === 'S2') return '50% Syllabus';
+  if (seriesType === 'S3') return examLevel === 'inter' ? 'Chapterwise' : '30% Syllabus';
+  return 'CA Successful Specials';
+};
+
+const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const parseFixedSeriesIdentifier = (value) => {
+  const raw = String(value || '').trim();
+  const lower = raw.toLowerCase();
+  if (!lower) {
+    return { raw, lower, seriesType: null, examLevel: 'final', fixedKey: null };
+  }
+
+  const parts = lower.split('-').filter(Boolean);
+  const seriesToken = parts.length > 0 ? parts[parts.length - 1] : lower;
+  const seriesType = ['s1', 's2', 's3', 's4'].includes(seriesToken) ? seriesToken.toUpperCase() : null;
+  const examLevel = lower.startsWith('inter-') ? 'inter' : 'final';
+  const fixedKey = seriesType ? lower : null;
+
+  return { raw, lower, seriesType, examLevel, fixedKey };
+};
+
+const findFixedSeriesDocument = async (identifier) => {
+  const parsed = parseFixedSeriesIdentifier(identifier);
+  let testSeries = null;
+
+  if (parsed.fixedKey) {
+    testSeries = await TestSeries.findOne({
+      fixedKey: { $regex: `^${escapeRegex(parsed.fixedKey)}$`, $options: 'i' },
+    });
+  }
+
+  if (!testSeries && parsed.seriesType) {
+    testSeries = await TestSeries.findOne({
+      seriesType: parsed.seriesType,
+      examLevel: parsed.examLevel,
+    });
+  }
+
+  // Fallback for legacy rows where examLevel may be missing/incorrect.
+  if (!testSeries && parsed.seriesType) {
+    testSeries = await TestSeries.findOne({ seriesType: parsed.seriesType });
+  }
+
+  return { parsed, testSeries };
+};
+
+const resolveSeriesForPaperRequest = async (testSeriesId, options = {}) => {
+  const { createIfMissing = false, creatorId = null } = options;
+
+  if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
+    const byId = await TestSeries.findById(testSeriesId);
+    if (byId) {
+      return {
+        testSeries: byId,
+        resolvedTestSeriesId: byId._id.toString(),
+        parsed: parseFixedSeriesIdentifier(byId.fixedKey || testSeriesId),
+      };
+    }
+  }
+
+  const { parsed, testSeries: existing } = await findFixedSeriesDocument(testSeriesId);
+  let testSeries = existing;
+
+  if (!testSeries && createIfMissing && parsed.seriesType) {
+    if (!creatorId) {
+      throw new Error('creatorId is required when createIfMissing is true');
+    }
+
+    testSeries = await TestSeries.create({
+      fixedKey: parsed.fixedKey || undefined,
+      title: `${parsed.examLevel === 'inter' ? 'CA Inter' : 'CA Final'} Test Series ${parsed.seriesType}`,
+      seriesType: parsed.seriesType,
+      seriesTypeLabel: getSeriesTypeLabel(parsed.seriesType, parsed.examLevel),
+      examLevel: parsed.examLevel,
+      category: null,
+      createdBy: creatorId,
+      publishStatus: 'published',
+      isActive: true,
+    });
+  }
+
+  return {
+    testSeries,
+    resolvedTestSeriesId: testSeries ? testSeries._id.toString() : null,
+    parsed,
+  };
+};
+
 // @desc    Upload test series paper with file to Appwrite
 // @route   POST /api/testseries/:testSeriesId/papers
 // @access  Private/SubAdmin
@@ -116,36 +208,10 @@ export const uploadPaper = async (req, res) => {
 
     console.log('[Upload] Processed fields:', { group, subject, paperType, paperNumber, syllabusPercentage, series });
 
-    // Resolve testSeriesId (must produce a valid TestSeries ObjectId)
-    let testSeries = null;
-    let resolvedTestSeriesId = null;
-
-    // If provided ID is a valid ObjectId, try to find it
-    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
-      testSeries = await TestSeries.findById(testSeriesId);
-      if (testSeries) resolvedTestSeriesId = testSeries._id.toString();
-    }
-
-    // If not found, treat param as seriesType shorthand (s1, s2, etc.) and find or create DB doc
-    if (!testSeries) {
-      const seriesType = String(testSeriesId || '').toUpperCase();
-      if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
-        testSeries = await TestSeries.findOne({ seriesType });
-        if (!testSeries) {
-          // Create a minimal TestSeries document so uploads can be linked and users can access content
-          testSeries = await TestSeries.create({
-            title: `Test Series ${seriesType}`,
-            seriesType,
-            seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
-            category: null,
-            createdBy: req.user._id,
-            publishStatus: 'published',
-            isActive: true,
-          });
-        }
-        resolvedTestSeriesId = testSeries._id.toString();
-      }
-    }
+    const { testSeries, resolvedTestSeriesId } = await resolveSeriesForPaperRequest(testSeriesId, {
+      createIfMissing: true,
+      creatorId: req.user?._id,
+    });
 
     if (!resolvedTestSeriesId) {
       return res.status(400).json({ success: false, message: 'Invalid testSeriesId' });
@@ -236,33 +302,7 @@ export const getPapersByTestSeries = async (req, res) => {
     let { testSeriesId } = req.params;
     const { group, subject, series, paperType } = req.query;
 
-    // Resolve to DB TestSeries ObjectId (create minimal doc for shorthand if needed)
-    let testSeries = null;
-    let resolvedTestSeriesId = null;
-
-    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
-      testSeries = await TestSeries.findById(testSeriesId);
-      if (testSeries) resolvedTestSeriesId = testSeries._id.toString();
-    }
-
-    if (!testSeries) {
-      const seriesType = String(testSeriesId || '').toUpperCase();
-      if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
-        testSeries = await TestSeries.findOne({ seriesType });
-        if (!testSeries) {
-          testSeries = await TestSeries.create({
-            title: `Test Series ${seriesType}`,
-            seriesType,
-            seriesTypeLabel: seriesType === 'S1' ? 'Full Syllabus' : seriesType === 'S2' ? '50% Syllabus' : seriesType === 'S3' ? '30% Syllabus' : 'CA Successful Specials',
-            category: null,
-            createdBy: null,
-            publishStatus: 'published',
-            isActive: true,
-          });
-        }
-        resolvedTestSeriesId = testSeries._id.toString();
-      }
-    }
+    const { testSeries, resolvedTestSeriesId } = await resolveSeriesForPaperRequest(testSeriesId);
 
     if (!resolvedTestSeriesId) {
       return res.status(404).json({ success: false, message: 'Test series not found' });
@@ -299,16 +339,7 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     console.log('[Access Control] getPapersGroupedBySubject called with testSeriesId:', testSeriesId);
 
-    // Resolve testSeriesId to DB TestSeries ObjectId
-    let resolvedTestSeries = null;
-    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
-      resolvedTestSeries = await TestSeries.findById(testSeriesId);
-    } else {
-      const seriesType = String(testSeriesId || '').toUpperCase();
-      if (['S1', 'S2', 'S3', 'S4'].includes(seriesType)) {
-        resolvedTestSeries = await TestSeries.findOne({ seriesType });
-      }
-    }
+    const { testSeries: resolvedTestSeries, parsed } = await resolveSeriesForPaperRequest(testSeriesId);
 
     if (!resolvedTestSeries) {
       console.log('[Access Control] No DB TestSeries found for', testSeriesId);
@@ -317,11 +348,33 @@ export const getPapersGroupedBySubject = async (req, res) => {
 
     // CRITICAL ACCESS CONTROL: Check enrollment and get purchased subjects
     const Enrollment = (await import('../models/Enrollment.js')).default;
-    const enrollments = await Enrollment.find({
-      userId: userId,
-      testSeriesId: resolvedTestSeries._id,
-      paymentStatus: 'paid'
-    });
+    const isInterScoped = (parsed?.fixedKey || '').startsWith('inter-');
+    const enrollmentCandidates = Array.from(new Set([
+      resolvedTestSeries?._id ? String(resolvedTestSeries._id) : null,
+      parsed?.fixedKey || null,
+      parsed?.seriesType && !isInterScoped ? parsed.seriesType.toLowerCase() : null,
+      parsed?.seriesType && !isInterScoped ? parsed.seriesType : null,
+    ].filter(Boolean)));
+
+    const enrollmentQuery = {
+      userId,
+      paymentStatus: 'paid',
+    };
+    if (enrollmentCandidates.length > 1) {
+      enrollmentQuery.$or = enrollmentCandidates.map((candidate) => ({
+        testSeriesId: mongoose.Types.ObjectId.isValid(candidate)
+          ? new mongoose.Types.ObjectId(candidate)
+          : candidate,
+      }));
+    } else if (enrollmentCandidates.length === 1) {
+      enrollmentQuery.testSeriesId = mongoose.Types.ObjectId.isValid(enrollmentCandidates[0])
+        ? new mongoose.Types.ObjectId(enrollmentCandidates[0])
+        : enrollmentCandidates[0];
+    } else {
+      enrollmentQuery.testSeriesId = resolvedTestSeries._id;
+    }
+
+    const enrollments = await Enrollment.find(enrollmentQuery);
 
     // If no paid enrollment, return empty papers
     if (!enrollments || enrollments.length === 0) {
@@ -547,34 +600,23 @@ export const deletePaper = async (req, res) => {
 export const getPapersSummary = async (req, res) => {
   try {
     let { testSeriesId } = req.params;
+    const { testSeries } = await resolveSeriesForPaperRequest(testSeriesId);
 
-    // Resolve testSeriesId - handle shorthand (s1, s2, etc) or ObjectId
-    let testSeries = null;
-    
-    if (mongoose.Types.ObjectId.isValid(testSeriesId)) {
-      testSeries = await TestSeries.findById(testSeriesId);
-    }
-    
     if (!testSeries) {
-      const seriesType = testSeriesId.toUpperCase();
-      testSeries = await TestSeries.findOne({ seriesType });
-    }
-    
-    // Use ID as-is for query
-    let queryId = testSeries ? testSeries._id.toString() : testSeriesId;
-    // Normalize shorthand to lowercase for consistency with upload
-    if (!testSeries && testSeriesId) {
-      queryId = testSeriesId.toLowerCase();
-    }
-    
-    // Check if test series exists - if we found it, continue
-    if (!testSeries) {
-      // Allow papers to be stored/retrieved with shorthand format even if TestSeries not in DB
-      console.log('[PapersSummary] No TestSeries document found, using provided ID:', testSeriesId);
+      return res.json({
+        success: true,
+        summary: {
+          total: 0,
+          byGroup: {},
+          bySubject: {},
+          byPaperType: {},
+          papersByGroupSubject: {},
+        },
+      });
     }
 
     // Get count of papers by group and subject
-    const papers = await TestSeriesPaper.find({ testSeriesId: queryId });
+    const papers = await TestSeriesPaper.find({ testSeriesId: testSeries._id });
     
     const summary = {
       total: papers.length,

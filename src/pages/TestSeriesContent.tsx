@@ -742,9 +742,16 @@ const TestSeriesContent = () => {
   const getPaperIdentifier = (paper: any) => {
     const subjectCode = paper.subject;
     const coverageLabel = paper.syllabusPercentage ? String(paper.syllabusPercentage).trim() : '';
+    const isInterSeries = (
+      String(id || '').toLowerCase().startsWith('inter-') ||
+      String(series?.fixedKey || '').toLowerCase().startsWith('inter-') ||
+      String(series?.examLevel || '').toLowerCase() === 'inter'
+    );
+    const displayCoverageLabel =
+      isInterSeries && coverageLabel === '30%' ? 'Chapterwise' : coverageLabel;
     const seriesLabel = paper.series ? seriesNames[paper.series] : '';
     const paperNumberLabel = paper.paperNumber ? `Paper ${paper.paperNumber}` : '';
-    return [subjectCode, coverageLabel ? `(${coverageLabel})` : '', seriesLabel, paperNumberLabel]
+    return [subjectCode, displayCoverageLabel ? `(${displayCoverageLabel})` : '', seriesLabel, paperNumberLabel]
       .filter(Boolean)
       .join(' ');
   };
