@@ -87,16 +87,36 @@ export const getDashboardStats = async (req, res) => {
     try { pendingTestimonials = await Testimonial.countDocuments({ status: 'pending' }); console.log('[Dashboard] pendingTestimonials:', pendingTestimonials); } catch (err) { console.error('[Dashboard] Error counting testimonials:', err); throw err; }
 
     // Total enrolled users (unique users with paid enrollments)
+    // Excluding test user: SACHIN PATEL (kurmisachin833@gmail.com)
     console.log('[Dashboard] Fetching totalEnrolledUsers');
     let totalEnrolledUsers;
-    try { totalEnrolledUsers = await Enrollment.distinct('userId', { paymentStatus: 'paid' }).then(users => users.length); console.log('[Dashboard] totalEnrolledUsers:', totalEnrolledUsers); } catch (err) { console.error('[Dashboard] Error fetching distinct enrolled users:', err); throw err; }
+    try {
+      // Find and exclude test user
+      const testUser = await User.findOne({ email: 'kurmisachin833@gmail.com' });
+      const enrollmentQuery = { paymentStatus: 'paid' };
+      if (testUser) {
+        enrollmentQuery.userId = { $ne: testUser._id };
+        console.log('[Dashboard] Excluding test user SACHIN PATEL from enrolled users count');
+      }
+      totalEnrolledUsers = await Enrollment.distinct('userId', enrollmentQuery).then(users => users.length);
+      console.log('[Dashboard] totalEnrolledUsers:', totalEnrolledUsers);
+    } catch (err) { console.error('[Dashboard] Error fetching distinct enrolled users:', err); throw err; }
 
     // Total revenue (sum of amounts from paid enrollments)
+    // Excluding test user: SACHIN PATEL (kurmisachin833@gmail.com)
     console.log('[Dashboard] Calculating totalRevenue');
     let totalRevenue;
     try {
+      // Find and exclude test user
+      const testUser = await User.findOne({ email: 'kurmisachin833@gmail.com' });
+      const matchStage = { $match: { paymentStatus: 'paid' } };
+      if (testUser) {
+        matchStage.$match.userId = { $ne: testUser._id };
+        console.log('[Dashboard] Excluding test user SACHIN PATEL from revenue calculation');
+      }
+      
       const revenueResult = await Enrollment.aggregate([
-        { $match: { paymentStatus: 'paid' } },
+        matchStage,
         { $group: { _id: null, total: { $sum: '$amount' } } }
       ]);
       totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
@@ -104,14 +124,22 @@ export const getDashboardStats = async (req, res) => {
     } catch (err) { console.error('[Dashboard] Error calculating revenue:', err); throw err; }
 
     // Recent enrollments (last 10 days)
+    // Excluding test user: SACHIN PATEL (kurmisachin833@gmail.com)
     const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
     console.log('[Dashboard] Fetching recentEnrollments');
     let recentEnrollments;
     try {
-      recentEnrollments = await Enrollment.find({
+      // Find test user to exclude
+      const testUserForRecent = await User.findOne({ email: 'kurmisachin833@gmail.com' });
+      const recentEnrollmentQuery = {
         enrollmentDate: { $gte: tenDaysAgo },
         paymentStatus: 'paid',
-      })
+      };
+      if (testUserForRecent) {
+        recentEnrollmentQuery.userId = { $ne: testUserForRecent._id };
+      }
+      
+      recentEnrollments = await Enrollment.find(recentEnrollmentQuery)
         .populate('userId', 'name')
         .populate('courseId', 'title')
         // NOTE: don't use default populate for testSeriesId because some enrollments
@@ -183,8 +211,15 @@ export const getDashboardStats = async (req, res) => {
 export const getRecentEnrollments = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
+    
+    // Find test user to exclude
+    const testUser = await User.findOne({ email: 'kurmisachin833@gmail.com' });
+    const query = { paymentStatus: 'paid' };
+    if (testUser) {
+      query.userId = { $ne: testUser._id };
+    }
 
-    const enrollments = await Enrollment.find({ paymentStatus: 'paid' })
+    const enrollments = await Enrollment.find(query)
       .populate('userId', 'name email')
       .populate('courseId', 'title')
       .populate('testSeriesId', 'title')
