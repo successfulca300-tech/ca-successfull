@@ -4,10 +4,14 @@ import { z } from "zod";
 import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { authAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, GraduationCap } from "lucide-react";
+
+const attemptOptions = ["May 26", "Sept 26", "Jan 26"] as const;
+const levelOptions = ["CA Inter", "CA Final"] as const;
+const preparingForOptions = ["Group 1", "Group 2", "Both Groups"] as const;
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -18,6 +22,10 @@ const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email"),
   phone: z.string().min(1, "Phone number is required"),
+  attempt: z.enum(attemptOptions, { message: "Please select an attempt" }),
+  level: z.enum(levelOptions, { message: "Please select a level" }),
+  preparingFor: z.enum(preparingForOptions, { message: "Please select what you are preparing for" }),
+  address: z.string().min(5, "Address is required"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -33,6 +41,10 @@ const Login = () => {
     name: "",
     email: "",
     phone: "",
+    attempt: "",
+    level: "",
+    preparingFor: "",
+    address: "",
     password: "",
     confirmPassword: "",
   });
@@ -40,7 +52,7 @@ const Login = () => {
   
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn, signUp } = useAuth();
+  const { signIn } = useAuth();
 
   // Check if signup tab is requested from URL
   useEffect(() => {
@@ -50,7 +62,7 @@ const Login = () => {
     }
   }, [searchParams]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
@@ -94,6 +106,10 @@ const Login = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
+          attempt: formData.attempt as (typeof attemptOptions)[number],
+          level: formData.level as (typeof levelOptions)[number],
+          preparingFor: formData.preparingFor as (typeof preparingForOptions)[number],
+          address: formData.address,
           password: formData.password,
           confirmPassword: formData.confirmPassword,
         });
@@ -120,6 +136,10 @@ const Login = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
+          attempt: formData.attempt,
+          level: formData.level,
+          preparingFor: formData.preparingFor,
+          address: formData.address,
           password: formData.password,
         }),
         });
@@ -232,6 +252,92 @@ const Login = () => {
                     />
                     {errors.phone && (
                       <p className="text-destructive text-sm mt-1">{errors.phone}</p>
+                    )}
+                  </div>
+                )}
+
+                {!isLogin && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">Attempt *</label>
+                    <select
+                      name="attempt"
+                      value={formData.attempt}
+                      onChange={handleChange}
+                      className="w-full h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      required
+                    >
+                      <option value="">Select your attempt</option>
+                      {attemptOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.attempt && (
+                      <p className="text-destructive text-sm mt-1">{errors.attempt}</p>
+                    )}
+                  </div>
+                )}
+
+                {!isLogin && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">Level *</label>
+                    <select
+                      name="level"
+                      value={formData.level}
+                      onChange={handleChange}
+                      className="w-full h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      required
+                    >
+                      <option value="">Select your level</option>
+                      {levelOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.level && (
+                      <p className="text-destructive text-sm mt-1">{errors.level}</p>
+                    )}
+                  </div>
+                )}
+
+                {!isLogin && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">Preparing For *</label>
+                    <select
+                      name="preparingFor"
+                      value={formData.preparingFor}
+                      onChange={handleChange}
+                      className="w-full h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      required
+                    >
+                      <option value="">Select group preference</option>
+                      {preparingForOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.preparingFor && (
+                      <p className="text-destructive text-sm mt-1">{errors.preparingFor}</p>
+                    )}
+                  </div>
+                )}
+
+                {!isLogin && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">Address *</label>
+                    <Textarea
+                      name="address"
+                      value={formData.address}
+                      onChange={handleChange}
+                      placeholder="Enter your address"
+                      className="bg-background border-border text-foreground min-h-[96px]"
+                      required
+                    />
+                    {errors.address && (
+                      <p className="text-destructive text-sm mt-1">{errors.address}</p>
                     )}
                   </div>
                 )}

@@ -62,29 +62,25 @@ export async function apiRequest<T>(
 
 // Auth API
 export const authAPI = {
-  register: async (name: string, email: string, password: string, role?: string) => {
+  register: async (payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    attempt: 'May 26' | 'Sept 26' | 'Jan 26';
+    level: 'CA Inter' | 'CA Final';
+    preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
+    address: string;
+    role?: string;
+  }) => {
     const data = await apiRequest<{
-      _id: string;
-      name: string;
-      email: string;
-      role: string;
-      token: string;
+      message: string;
+      userId: string;
     }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password, role }),
+      body: JSON.stringify(payload),
     });
-    
-    // Store token
-    if (data.token) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify({
-        _id: data._id,
-        name: data.name,
-        email: data.email,
-        role: data.role,
-      }));
-    }
-    
+
     return data;
   },
 
@@ -119,6 +115,18 @@ export const authAPI = {
       _id: string;
       name: string;
       email: string;
+      phone?: string;
+      dateOfBirth?: string;
+      attempt?: 'May 26' | 'Sept 26' | 'Jan 26';
+      level?: 'CA Inter' | 'CA Final';
+      preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
+      address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        postalCode?: string;
+      };
       role: string;
       isActive: boolean;
       createdAt: string;
@@ -1234,6 +1242,9 @@ export const usersAPI = {
     name?: string;
     phone?: string;
     dateOfBirth?: string;
+    attempt?: 'May 26' | 'Sept 26' | 'Jan 26' | '';
+    level?: 'CA Inter' | 'CA Final' | '';
+    preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups' | '';
     address?: {
       street?: string;
       city?: string;

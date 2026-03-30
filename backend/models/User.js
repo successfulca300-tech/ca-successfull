@@ -43,6 +43,21 @@ const userSchema = new mongoose.Schema(
     dateOfBirth: {
       type: Date,
     },
+    attempt: {
+      type: String,
+      enum: ['May 26', 'Sept 26', 'Jan 26'],
+      trim: true,
+    },
+    level: {
+      type: String,
+      enum: ['CA Inter', 'CA Final'],
+      trim: true,
+    },
+    preparingFor: {
+      type: String,
+      enum: ['Group 1', 'Group 2', 'Both Groups'],
+      trim: true,
+    },
     address: {
       street: {
         type: String,

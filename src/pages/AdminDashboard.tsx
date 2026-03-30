@@ -584,23 +584,51 @@ const AdminDashboard = () => {
         return user.enrollmentNames || user.enrollmentName || 'Enrolled';
       };
 
+      const formatAddress = (user: any) => {
+        if (!user?.address) return 'N/A';
+        const { street, city, state, country, postalCode } = user.address;
+        const parts = [street, city, state, postalCode, country].filter(Boolean);
+        return parts.length > 0 ? parts.join(', ') : 'N/A';
+      };
+
       // Prepare data for export
       const exportData = users.map((user) => ({
         Name: user.name || '',
         Email: user.email || '',
-        'Phone Number': user.phone || '',
+        'Phone Number': user.phone || 'N/A',
+        'Attempt': user.attempt || 'N/A',
+        'Level': user.level || 'N/A',
+        'Preparing For': user.preparingFor || 'N/A',
+        'Address': formatAddress(user),
+        'Email Verified': user.isVerified ? 'Yes' : 'No',
+        'Join Date': user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A',
         'Enrollment Status': formatEnrollmentForExport(user),
       }));
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
 
+      // Set column widths for better readability
+      const colWidths = [
+        { wch: 20 }, // Name
+        { wch: 25 }, // Email
+        { wch: 15 }, // Phone Number
+        { wch: 12 }, // Attempt
+        { wch: 12 }, // Level
+        { wch: 18 }, // Preparing For
+        { wch: 30 }, // Address
+        { wch: 12 }, // Email Verified
+        { wch: 12 }, // Join Date
+        { wch: 25 }, // Enrollment Status
+      ];
+      ws['!cols'] = colWidths;
+
       // Create workbook
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Users');
 
       // Generate filename
-      const filename = `User Enrollment Status.xlsx`;
+      const filename = `User Details ${new Date().toLocaleDateString()}.xlsx`;
 
       // Write and download
       XLSX.writeFile(wb, filename);
@@ -944,46 +972,74 @@ const AdminDashboard = () => {
                       Export to Excel
                     </Button>
                   </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Phone Number</TableHead>
-                        <TableHead>Enrollment Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.filter(u => u.role !== 'admin' && u.role !== 'subadmin').map((u) => (
-                        <TableRow key={u._id || u.id}>
-                          <TableCell>{u.name}</TableCell>
-                          <TableCell>{u.email}</TableCell>
-                          <TableCell>{u.phone || 'N/A'}</TableCell>
-	                          <TableCell>
-	                            {u.isEnrolled ? (
-	                              <div className="space-y-1">
-	                                {(Array.isArray(u.enrollmentDetails) && u.enrollmentDetails.length > 0
-	                                  ? u.enrollmentDetails
-	                                  : [u.enrollmentNames || u.enrollmentName || 'Enrolled']
-	                                ).map((entry: string, idx: number) => (
-	                                  <div
-	                                    key={`${u._id || u.id}-enrollment-${idx}`}
-	                                    className="inline-block mr-2 mb-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-500 text-white"
-	                                  >
-	                                    {entry}
-	                                  </div>
-	                                ))}
-	                              </div>
-	                            ) : (
-	                              <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-red-500 text-white">
-	                                Not Enrolled in any course
-	                              </span>
-	                            )}
-	                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Phone Number</TableHead>
+                          <TableHead>Attempt</TableHead>
+                          <TableHead>Level</TableHead>
+                          <TableHead>Preparing For</TableHead>
+                          <TableHead>Address</TableHead>
+                          <TableHead>Email Verified</TableHead>
+                          <TableHead>Join Date</TableHead>
+                          <TableHead>Enrollment Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {users.filter(u => u.role !== 'admin' && u.role !== 'subadmin').map((u) => (
+                          <TableRow key={u._id || u.id}>
+                            <TableCell className="font-medium">{u.name}</TableCell>
+                            <TableCell>{u.email}</TableCell>
+                            <TableCell>{u.phone || 'N/A'}</TableCell>
+                            <TableCell>{u.attempt || 'N/A'}</TableCell>
+                            <TableCell>{u.level || 'N/A'}</TableCell>
+                            <TableCell>{u.preparingFor || 'N/A'}</TableCell>
+                            <TableCell>
+                              {u.address ? (
+                                <div className="text-sm">
+                                  {u.address.street || u.address.city || u.address.state || 'N/A'}
+                                </div>
+                              ) : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                u.isVerified ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {u.isVerified ? '✓ Yes' : '✗ No'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}
+                            </TableCell>
+                            <TableCell className="min-w-[250px]">
+                              {u.isEnrolled ? (
+                                <div className="flex flex-col gap-2">
+                                  {(Array.isArray(u.enrollmentDetails) && u.enrollmentDetails.length > 0
+                                    ? u.enrollmentDetails
+                                    : [u.enrollmentNames || u.enrollmentName || 'Enrolled']
+                                  ).map((entry: string, idx: number) => (
+                                    <span
+                                      key={`${u._id || u.id}-enrollment-${idx}`}
+                                      className="block px-3 py-1.5 rounded-md text-xs font-semibold bg-blue-500 text-white text-center"
+                                    >
+                                      {entry}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="block px-3 py-1.5 rounded-md text-xs font-semibold bg-red-500 text-white text-center">
+                                  Not Enrolled
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
 

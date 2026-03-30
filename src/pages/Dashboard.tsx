@@ -13,7 +13,7 @@ const menuItems = [
   { id: "courses", label: "Mentorship", icon: BookOpen },
   { id: "test-series", label: "My Test Series", icon: FileText },
   { id: "books", label: "My Books", icon: BookOpen },
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "settings", label: "My Profile", icon: User },
   { id: "address", label: "Address", icon: MapPin },
 ];
 
@@ -22,6 +22,10 @@ const mentorshipPlanTitles: Record<string, string> = {
   mentorship_golden_02: "Golden Mentorship Plan",
   mentorship_platinum_03: "Platinum Mentorship Plan",
 };
+
+const attemptOptions = ["May 26", "Sept 26", "Jan 26"] as const;
+const levelOptions = ["CA Inter", "CA Final"] as const;
+const preparingForOptions = ["Group 1", "Group 2", "Both Groups"] as const;
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -44,6 +48,9 @@ const Dashboard = () => {
     name: '',
     phone: '',
     dateOfBirth: '',
+    attempt: '',
+    level: '',
+    preparingFor: '',
   });
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -95,6 +102,9 @@ const Dashboard = () => {
             name: fullUserData?.name || '',
             phone: fullUserData?.phone || '',
             dateOfBirth: fullUserData?.dateOfBirth ? new Date(fullUserData.dateOfBirth).toISOString().split('T')[0] : '',
+            attempt: fullUserData?.attempt || '',
+            level: fullUserData?.level || '',
+            preparingFor: fullUserData?.preparingFor || '',
           });
           setAddressData({
             street: fullUserData?.address?.street || '',
@@ -110,6 +120,9 @@ const Dashboard = () => {
             name: userData?.name || '',
             phone: userData?.phone || '',
             dateOfBirth: userData?.dateOfBirth ? new Date(userData.dateOfBirth).toISOString().split('T')[0] : '',
+            attempt: userData?.attempt || '',
+            level: userData?.level || '',
+            preparingFor: userData?.preparingFor || '',
           });
           setAddressData({
             street: userData?.address?.street || '',
@@ -255,6 +268,9 @@ const Dashboard = () => {
         name: formData.name,
         phone: formData.phone,
         dateOfBirth: formData.dateOfBirth,
+        attempt: formData.attempt as (typeof attemptOptions)[number] | '',
+        level: formData.level as (typeof levelOptions)[number] | '',
+        preparingFor: formData.preparingFor as (typeof preparingForOptions)[number] | '',
       });
 
       // Update user in localStorage with new data
@@ -263,6 +279,9 @@ const Dashboard = () => {
         name: (res as any).name,
         phone: (res as any).phone,
         dateOfBirth: (res as any).dateOfBirth,
+        attempt: (res as any).attempt,
+        level: (res as any).level,
+        preparingFor: (res as any).preparingFor,
         address: (res as any).address,
       };
       localStorage.setItem('user', JSON.stringify(updatedUser));
@@ -495,113 +514,222 @@ const Dashboard = () => {
               )}
 
               {activeTab === "settings" && (
-                <div className="bg-card p-8 rounded-xl shadow-sm border border-border">
-                  <h2 className="text-xl font-semibold mb-6">Profile Settings</h2>
-
-
-
-                  {/* Profile Form */}
-                  <form onSubmit={handleUpdateProfile} className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Name</label>
-                      <Input
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="Enter your name"
-                      />
+                <div className="space-y-6">
+                  {/* Profile Header Card */}
+                  <div className="bg-gradient-to-r from-primary to-navy rounded-xl shadow-lg p-8 text-white">
+                    <div className="flex items-center gap-6">
+                      <div className="w-24 h-24 rounded-full bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0 border-2 border-white/30">
+                        <User size={48} className="text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h2 className="text-3xl font-bold mb-2 text-yellow-100 drop-shadow-lg">{formData.name}</h2>
+                        <p className="text-white/80 mb-3">{user?.email}</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {formData.level && (
+                            <span className="px-3 py-1 bg-white/20 rounded-full text-sm font-medium">
+                              {formData.level}
+                            </span>
+                          )}
+                          {formData.attempt && (
+                            <span className="px-3 py-1 bg-white/20 rounded-full text-sm font-medium">
+                              {formData.attempt}
+                            </span>
+                          )}
+                          {formData.preparingFor && (
+                            <span className="px-3 py-1 bg-white/20 rounded-full text-sm font-medium">
+                              {formData.preparingFor}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Email</label>
-                      <Input
-                        type="email"
-                        value={user?.email || ""}
-                        className="bg-muted"
-                        disabled
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">Email cannot be changed</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Phone</label>
-                      <Input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        placeholder="Enter phone number"
-                      />
-                    </div>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Date of Birth</label>
-                      <Input
-                        type="date"
-                        value={formData.dateOfBirth}
-                        onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                      />
-                    </div>
+                  {/* Profile Information Card */}
+                  <div className="bg-card rounded-xl shadow-sm border border-border p-8">
+                    <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                      <User size={20} />
+                      Personal Information
+                    </h3>
 
-                    <Button
-                      type="submit"
-                      className="btn-primary w-full"
-                      disabled={submitting}
-                    >
-                      {submitting ? (
-                        <>
-                          <Loader2 size={16} className="mr-2 animate-spin" />
-                          Updating...
-                        </>
-                      ) : (
-                        "Update Profile"
-                      )}
-                    </Button>
-                  </form>
+                    <form onSubmit={handleUpdateProfile} className="space-y-6">
+                      {/* Name */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Full Name</label>
+                        <Input
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="Enter your full name"
+                          className="text-base"
+                        />
+                      </div>
 
-                  <div className="my-8 border-t border-border" />
+                      {/* Email */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Email Address</label>
+                        <Input
+                          type="email"
+                          value={user?.email || ""}
+                          className="bg-muted text-base"
+                          disabled
+                        />
+                        <p className="text-xs text-muted-foreground mt-1.5">✓ Email cannot be changed</p>
+                      </div>
 
-                  <h3 className="text-lg font-semibold mb-4">Change Password</h3>
-                  <form onSubmit={handleChangePassword} className="space-y-5">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Current Password</label>
-                      <Input
-                        type="password"
-                        value={passwordData.currentPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                        placeholder="Enter current password"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">New Password</label>
-                      <Input
-                        type="password"
-                        value={passwordData.newPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                        placeholder="Enter new password"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Confirm New Password</label>
-                      <Input
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                        placeholder="Confirm new password"
-                      />
-                    </div>
+                      {/* Phone */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Phone Number</label>
+                        <Input
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          placeholder="Enter phone number"
+                          className="text-base"
+                        />
+                      </div>
 
-                    <Button
-                      type="submit"
-                      className="btn-primary w-full"
-                      disabled={passwordSubmitting}
-                    >
-                      {passwordSubmitting ? (
-                        <>
-                          <Loader2 size={16} className="mr-2 animate-spin" />
-                          Updating...
-                        </>
-                      ) : (
-                        "Update Password"
-                      )}
-                    </Button>
-                  </form>
+                      {/* Date of Birth */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Date of Birth</label>
+                        <Input
+                          type="date"
+                          value={formData.dateOfBirth}
+                          onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                          className="text-base"
+                        />
+                      </div>
+
+                      {/* Exam Details Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Attempt */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Attempt</label>
+                          <select
+                            value={formData.attempt}
+                            onChange={(e) => setFormData({ ...formData, attempt: e.target.value })}
+                            className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <option value="">Select attempt</option>
+                            {attemptOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Level */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Level</label>
+                          <select
+                            value={formData.level}
+                            onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                            className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <option value="">Select level</option>
+                            {levelOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Preparing For */}
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Preparing For</label>
+                          <select
+                            value={formData.preparingFor}
+                            onChange={(e) => setFormData({ ...formData, preparingFor: e.target.value })}
+                            className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <option value="">Select group</option>
+                            {preparingForOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="submit"
+                        className="btn-primary w-full py-3 text-base font-semibold"
+                        disabled={submitting}
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 size={18} className="mr-2 animate-spin" />
+                            Saving Changes...
+                          </>
+                        ) : (
+                          "Save Profile Changes"
+                        )}
+                      </Button>
+                    </form>
+                  </div>
+
+                  {/* Security Card */}
+                  <div className="bg-card rounded-xl shadow-sm border border-border p-8">
+                    <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                      <Lock size={20} />
+                      Change Password
+                    </h3>
+
+                    <form onSubmit={handleChangePassword} className="space-y-6">
+                      {/* Current Password */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Current Password</label>
+                        <Input
+                          type="password"
+                          value={passwordData.currentPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                          placeholder="Enter your current password"
+                          className="text-base"
+                        />
+                      </div>
+
+                      {/* New Password */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">New Password</label>
+                        <Input
+                          type="password"
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                          placeholder="Enter new password (min. 6 characters)"
+                          className="text-base"
+                        />
+                      </div>
+
+                      {/* Confirm Password */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Confirm Password</label>
+                        <Input
+                          type="password"
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          placeholder="Re-enter new password"
+                          className="text-base"
+                        />
+                      </div>
+
+                      <Button
+                        type="submit"
+                        className="btn-primary w-full py-3 text-base font-semibold"
+                        disabled={passwordSubmitting}
+                      >
+                        {passwordSubmitting ? (
+                          <>
+                            <Loader2 size={18} className="mr-2 animate-spin" />
+                            Updating Password...
+                          </>
+                        ) : (
+                          "Update Password"
+                        )}
+                      </Button>
+                    </form>
+                  </div>
                 </div>
               )}
 

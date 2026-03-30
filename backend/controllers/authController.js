@@ -6,6 +6,10 @@ import crypto from 'crypto';
 // import sendVerificationEmail from '../utils/sendVerificationEmail.js';
 import sendOTPEmail, { sendPasswordResetOTP } from '../utils/email.js';
 
+const ATTEMPT_OPTIONS = ['May 26', 'Sept 26', 'Jan 26'];
+const LEVEL_OPTIONS = ['CA Inter', 'CA Final'];
+const PREPARING_FOR_OPTIONS = ['Group 1', 'Group 2', 'Both Groups'];
+
 /* =================================
    REGISTER
 ================================= */
@@ -16,12 +20,26 @@ export const register = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, role, phone, attempt, level, preparingFor, address } = req.body;
 
     // Validate phone number
     const phoneValidation = validatePhone(phone);
     if (!phoneValidation.isValid) {
       return res.status(400).json({ message: phoneValidation.message });
+    }
+    if (!ATTEMPT_OPTIONS.includes(attempt)) {
+      return res.status(400).json({ message: 'Please select a valid attempt' });
+    }
+    if (!LEVEL_OPTIONS.includes(level)) {
+      return res.status(400).json({ message: 'Please select a valid level' });
+    }
+    if (!PREPARING_FOR_OPTIONS.includes(preparingFor)) {
+      return res.status(400).json({ message: 'Please select what you are preparing for' });
+    }
+
+    const normalizedAddress = typeof address === 'string' ? address.trim() : '';
+    if (!normalizedAddress) {
+      return res.status(400).json({ message: 'Address is required' });
     }
 
     const userExists = await User.findOne({ email });
@@ -39,6 +57,13 @@ export const register = async (req, res) => {
       email,
       phone,
       password,
+      attempt,
+      level,
+      preparingFor,
+      address: {
+        street: normalizedAddress,
+        country: 'India',
+      },
       role: role || 'user',
       isVerified: false,
       emailOTP: otp,

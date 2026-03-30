@@ -31,6 +31,10 @@ const MENTORSHIP_PLAN_TITLES = {
   mentorship_platinum_03: 'Platinum Mentorship Plan',
 };
 
+const ATTEMPT_OPTIONS = ['May 26', 'Sept 26', 'Jan 26'];
+const LEVEL_OPTIONS = ['CA Inter', 'CA Final'];
+const PREPARING_FOR_OPTIONS = ['Group 1', 'Group 2', 'Both Groups'];
+
 const SUBJECT_LABELS = {
   fr: 'FR',
   afm: 'AFM',
@@ -506,7 +510,7 @@ export const deleteUser = async (req, res) => {
 export const updateUserProfile = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { name, phone, dateOfBirth, address } = req.body;
+    const { name, phone, dateOfBirth, address, attempt, level, preparingFor } = req.body;
 
     const user = await User.findById(userId);
 
@@ -524,6 +528,37 @@ export const updateUserProfile = async (req, res) => {
       user.phone = phone;
     }
     if (dateOfBirth) user.dateOfBirth = dateOfBirth;
+
+    if (attempt !== undefined) {
+      if (attempt === '') {
+        user.attempt = undefined;
+      } else if (!ATTEMPT_OPTIONS.includes(attempt)) {
+        return res.status(400).json({ message: 'Invalid attempt selected' });
+      } else {
+        user.attempt = attempt;
+      }
+    }
+
+    if (level !== undefined) {
+      if (level === '') {
+        user.level = undefined;
+      } else if (!LEVEL_OPTIONS.includes(level)) {
+        return res.status(400).json({ message: 'Invalid level selected' });
+      } else {
+        user.level = level;
+      }
+    }
+
+    if (preparingFor !== undefined) {
+      if (preparingFor === '') {
+        user.preparingFor = undefined;
+      } else if (!PREPARING_FOR_OPTIONS.includes(preparingFor)) {
+        return res.status(400).json({ message: 'Invalid preparing-for option selected' });
+      } else {
+        user.preparingFor = preparingFor;
+      }
+    }
+
     if (address) {
       user.address = {
         street: address.street || user.address?.street,
@@ -543,6 +578,9 @@ export const updateUserProfile = async (req, res) => {
       email: updatedUser.email,
       phone: updatedUser.phone,
       dateOfBirth: updatedUser.dateOfBirth,
+      attempt: updatedUser.attempt,
+      level: updatedUser.level,
+      preparingFor: updatedUser.preparingFor,
       address: updatedUser.address,
       role: updatedUser.role,
     });

@@ -18,7 +18,16 @@ interface AuthContextType {
   session: { token: string } | null;
   loading: boolean;
   userRole: UserRole | null;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUp: (data: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    attempt: 'May 26' | 'Sept 26' | 'Jan 26';
+    level: 'CA Inter' | 'CA Final';
+    preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
+    address: string;
+  }) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null; role?: UserRole }>;
   signOut: () => Promise<void>;
 }
@@ -82,11 +91,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (data: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    attempt: 'May 26' | 'Sept 26' | 'Jan 26';
+    level: 'CA Inter' | 'CA Final';
+    preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
+    address: string;
+  }) => {
     try {
-      const data = await authAPI.register(fullName, email, password);
+      const response = await authAPI.register(data);
       // Don't auto-login after registration - user needs to verify email first
-      return { error: null, message: data.message };
+      return { error: null, message: response.message };
     } catch (error: any) {
       return { error: error as Error };
     }
