@@ -197,7 +197,7 @@ const Login = () => {
                 <button
                   onClick={() => setIsLogin(false)}
                   className={`flex-1 pb-4 text-lg font-semibold transition-colors ${
-                    !isLogin ? "text-primary border-b-2 border-primary" : "text-muted-foreground"
+                    isLogin ? "text-muted-foreground" : "text-primary border-b-2 border-primary"
                   }`}
                 >
                   Sign Up

@@ -73,15 +73,13 @@ export const authAPI = {
     address: string;
     role?: string;
   }) => {
-    const data = await apiRequest<{
+    return apiRequest<{
       message: string;
       userId: string;
     }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-
-    return data;
   },
 
   login: async (email: string, password: string) => {

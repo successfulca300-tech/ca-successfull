@@ -218,9 +218,8 @@ const Dashboard = () => {
     try {
       const saved = localStorage.getItem('savedResources');
       if (saved) {
-        const resources = JSON.parse(saved);
         // Resources loaded from localStorage
-        return resources;
+        return JSON.parse(saved);
       }
     } catch (err) {
       console.error('Error loading saved resources:', err);

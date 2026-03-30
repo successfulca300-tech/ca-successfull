@@ -428,14 +428,14 @@ By enrolling in the test series, students are agree to our terms and conditions.
     try {
       const res = await offersAPI.validateCoupon(code);
       if (res.valid) {
-        const offer = res.offer;
+        const { code: offerCode, discountType, discountValue, title } = res.offer;
         setAppliedDiscount({
-          code: offer.code,
-          type: offer.discountType === 'percentage' ? 'percent' : 'flat',
-          value: offer.discountValue,
-          label: offer.title,
+          code: offerCode,
+          type: discountType === 'percentage' ? 'percent' : 'flat',
+          value: discountValue,
+          label: title,
         });
-        toast.success(`${offer.title} applied`);
+        toast.success(`${title} applied`);
       } else {
         setAppliedDiscount(null);
         toast.error('Invalid discount code');
