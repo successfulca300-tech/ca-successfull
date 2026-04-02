@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { GraduationCap, BookOpen, Trophy, ArrowUp } from "lucide-react";
 import { useEffect, useState } from 'react';
-import { settingsAPI } from '@/lib/api';
 
 const HeroSection = () => {
   return (
@@ -143,23 +142,7 @@ function WhatsAppButton() {
 }
 
 function HeroImage() {
-  const [src, setSrc] = useState<string>('');
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await settingsAPI.get();
-        const s = (res as any).settings || {};
-        if (mounted) setSrc(s.heroImage || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&h=600&fit=crop');
-      } catch (e) {
-        if (mounted) setSrc('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&h=600&fit=crop');
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
   return (
-    <img src={src} alt="Students studying" className="w-full h-full object-contain opacity-90" />
+    <img src="/logo.png" alt="CA Successful logo" className="w-full h-full object-contain opacity-90" />
   );
 }
