@@ -4,6 +4,7 @@ import { validationResult } from 'express-validator';
 import { uploadFileToAppwrite, deleteFileFromAppwrite } from '../utils/appwriteFileService.js';
 import fs from 'fs';
 import mongoose from 'mongoose';
+import { isTestSeriesEnrollmentActive } from '../utils/testSeriesAttempt.js';
 
 const normalizeSyllabusPercentageForSeries = (seriesType, providedValue) => {
   const current = ['100%', '50%', '30%'].includes(String(providedValue)) ? String(providedValue) : '100%';
@@ -375,16 +376,17 @@ export const getPapersGroupedBySubject = async (req, res) => {
     }
 
     const enrollments = await Enrollment.find(enrollmentQuery);
+    const activeEnrollments = enrollments.filter((enrollment) => isTestSeriesEnrollmentActive(enrollment));
 
     // If no paid enrollment, return empty papers
-    if (!enrollments || enrollments.length === 0) {
+    if (!activeEnrollments || activeEnrollments.length === 0) {
       console.log(`[Access Control] No paid enrollment found for user ${userId} on series ${resolvedTestSeries._id}`);
       return res.json({ success: true, papers: {} });
     }
 
     // Merge all purchasedSubjects from all enrollments (user may have purchased subjects in multiple batches)
     const allSubjectsSet = new Set();
-    enrollments.forEach(enrollment => {
+    activeEnrollments.forEach(enrollment => {
       if (enrollment.purchasedSubjects && Array.isArray(enrollment.purchasedSubjects)) {
         enrollment.purchasedSubjects.forEach(subject => allSubjectsSet.add(subject));
       }
@@ -393,7 +395,7 @@ export const getPapersGroupedBySubject = async (req, res) => {
     const purchasedSubjects = Array.from(allSubjectsSet);
     
     // Log for debugging
-    console.log(`[Access Control] User ${userId} - Found ${enrollments.length} enrollments. Merged subjects:`, purchasedSubjects);
+    console.log(`[Access Control] User ${userId} - Found ${activeEnrollments.length} active enrollments. Merged subjects:`, purchasedSubjects);
 
     // If no purchased subjects, return empty (prevent all subjects from showing)
     if (purchasedSubjects.length === 0) {

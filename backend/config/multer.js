@@ -11,6 +11,8 @@ const memoryStorage = multer.memoryStorage();
 
 // File filter - allow only PDFs and documents
 const fileFilter = (req, file, cb) => {
+  console.log('[multer fileFilter] File received:', file.originalname, 'MIME:', file.mimetype);
+  
   // Allowed MIME types
   const allowedTypes = [
     'application/pdf',
@@ -31,9 +33,12 @@ const fileFilter = (req, file, cb) => {
   const mimeType = file.mimetype;
 
   if (allowedExtensions.includes(ext) && allowedTypes.includes(mimeType)) {
+    console.log('[multer fileFilter] ✓ File accepted:', file.originalname);
     cb(null, true);
   } else {
-    cb(new Error(`File type not allowed. Allowed types: ${allowedExtensions.join(', ')}`), false);
+    const error = new Error(`File type not allowed. Allowed types: ${allowedExtensions.join(', ')}`);
+    console.error('[multer fileFilter] ✗ File rejected:', file.originalname, error.message);
+    cb(error, false);
   }
 };
 

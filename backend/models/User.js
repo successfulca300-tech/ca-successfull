@@ -82,7 +82,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'admin', 'subadmin'],
+      enum: ['user', 'admin', 'subadmin', 'teacher'],
       default: 'user',
     },
     isActive: {
@@ -108,6 +108,57 @@ const userSchema = new mongoose.Schema(
     profilePicture: {
       type: String,
       default: null,
+    },
+    // Teacher-specific fields (only for role === 'teacher')
+    teacherProfile: {
+      rating: {
+        type: Number,
+        min: 0,
+        max: 5,
+        default: 0,
+      },
+      totalCopiesRequested: {
+        type: Number,
+        default: 0,
+      },
+      totalCopiesApproved: {
+        type: Number,
+        default: 0,
+      },
+      totalCopiesEvaluated: {
+        type: Number,
+        default: 0,
+      },
+      averageEvaluationTime: {
+        type: Number, // in hours
+        default: 0,
+      },
+      feedback: {
+        type: String,
+        trim: true,
+      },
+      feedbackUpdatedAt: {
+        type: Date,
+        default: null,
+      },
+      warnings: [
+        {
+          type: {
+            type: String,
+            enum: ['performance', 'conduct', 'quality', 'compliance', 'other'],
+            required: true,
+          },
+          message: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          issuedAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
     },
   },
   {

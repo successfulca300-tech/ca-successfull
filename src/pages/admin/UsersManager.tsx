@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const UsersManager = () => {
   const navigate = useNavigate();
@@ -50,6 +57,16 @@ const UsersManager = () => {
     }
   };
 
+  const handleChangeRole = async (id: string, newRole: string) => {
+    try {
+      await usersAPI.update(id, { role: newRole });
+      toast.success(`User role changed to ${newRole}`);
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to change role');
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Delete user permanently?')) return;
     try {
@@ -85,11 +102,22 @@ const UsersManager = () => {
             <div className="grid gap-3">
               {filtered.map(u => (
                 <div key={u._id} className="flex items-center justify-between p-3 bg-card rounded-lg border border-border">
-                  <div>
+                  <div className="flex-1">
                     <p className="font-medium">{u.name}</p>
-                    <p className="text-xs text-muted-foreground">{u.email} • {u.role}</p>
+                    <p className="text-xs text-muted-foreground">{u.email}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    <Select value={u.role} onValueChange={(newRole) => handleChangeRole(u._id, newRole)}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="teacher">Teacher</SelectItem>
+                        <SelectItem value="subadmin">SubAdmin</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button variant="outline" size="sm" onClick={() => handleToggleActive(u._id, u.isActive)}>{u.isActive ? 'Disable' : 'Enable'}</Button>
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(u._id)}>Delete</Button>
                   </div>

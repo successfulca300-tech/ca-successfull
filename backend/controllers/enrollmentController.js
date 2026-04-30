@@ -5,6 +5,15 @@ import TestSeries from '../models/TestSeries.js';
 import Book from '../models/Book.js';
 import Cart from '../models/Cart.js';
 import { validationResult } from 'express-validator';
+import {
+  getAllowedTestSeriesAttempts,
+  getAttemptSelectionHint,
+  isAttemptAllowedForExamLevel,
+  normalizeTestSeriesAttempt,
+  getAttemptExpiryDate,
+  isTestSeriesEnrollmentActive,
+  isTestSeriesEnrollmentExpired,
+} from '../utils/testSeriesAttempt.js';
 
 const getSeriesTypeLabel = (seriesType, examLevel = 'final') => {
   if (seriesType === 'S1') return 'Full Syllabus';
@@ -116,6 +125,35 @@ const getUnpurchasedSubjects = (requestedSubjects = [], ownedSubjects = []) => {
   return requested.filter((subject) => !ownedSet.has(normalizeSubjectToken(subject)));
 };
 
+const mergeEnrollmentRows = (rows = []) => {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const merged = rows[0].toObject ? rows[0].toObject() : { ...rows[0] };
+  const allSubjects = new Set();
+
+  rows.forEach((row) => {
+    if (Array.isArray(row?.purchasedSubjects)) {
+      row.purchasedSubjects.forEach((subject) => allSubjects.add(subject));
+    }
+  });
+
+  merged.purchasedSubjects = Array.from(allSubjects);
+  return merged;
+};
+
+const syncDerivedAttemptExpiry = (enrollment) => {
+  if (!enrollment?.testSeriesAttempt) return enrollment;
+  const derivedExpiry = getAttemptExpiryDate(enrollment.testSeriesAttempt);
+  if (!derivedExpiry) return enrollment;
+
+  if (enrollment._doc) {
+    enrollment._doc.expiryDate = derivedExpiry;
+  } else {
+    enrollment.expiryDate = derivedExpiry;
+  }
+  return enrollment;
+};
+
 // @desc    Get user enrollments
 // @route   GET /api/enrollments
 // @access  Private
@@ -143,11 +181,19 @@ export const getEnrollments = async (req, res) => {
 
     // Manually populate testSeriesId if it's a valid ObjectId
     for (let enrollment of enrollments) {
+      syncDerivedAttemptExpiry(enrollment);
       if (enrollment.testSeriesId && mongoose.Types.ObjectId.isValid(enrollment.testSeriesId)) {
         const testSeries = await TestSeries.findById(enrollment.testSeriesId, 'title price thumbnail');
         if (testSeries) {
           enrollment.testSeriesId = testSeries;
         }
+      }
+
+      if (enrollment.testSeriesId) {
+        const isActive = isTestSeriesEnrollmentActive(enrollment);
+        const isExpired = isTestSeriesEnrollmentExpired(enrollment);
+        enrollment._doc.isActiveForAccess = isActive;
+        enrollment._doc.isExpired = isExpired;
       }
     }
 
@@ -185,6 +231,7 @@ export const getEnrollmentById = async (req, res) => {
     }
 
     // Manually populate testSeriesId
+    syncDerivedAttemptExpiry(enrollment);
     if (enrollment.testSeriesId && mongoose.Types.ObjectId.isValid(enrollment.testSeriesId)) {
       const testSeries = await TestSeries.findById(enrollment.testSeriesId, 'title description price thumbnail tests');
       if (testSeries) {
@@ -212,7 +259,7 @@ export const createEnrollment = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { courseId, testSeriesId, bookId, amount } = req.body;
+    const { courseId, testSeriesId, bookId, amount, testSeriesAttempt } = req.body;
 
     // Prevent admin/subadmin from creating enrollments
     if (req.user && (req.user.role === 'admin' || req.user.role === 'subadmin')) {
@@ -222,15 +269,30 @@ export const createEnrollment = async (req, res) => {
     let resource;
     let resourceType = null;
     let parsedSeries = null;
+    let normalizedTestSeriesAttempt = null;
 
     if (courseId) {
       resource = await Course.findById(courseId);
       resourceType = 'course';
     } else if (testSeriesId) {
+      normalizedTestSeriesAttempt = normalizeTestSeriesAttempt(testSeriesAttempt);
+      if (!normalizedTestSeriesAttempt) {
+        const examLevel = resource?.examLevel || parsedSeries?.examLevel || 'final';
+        return res.status(400).json({
+          message: `Attempt is required for test series purchase. Use upcoming ${getAttemptSelectionHint(examLevel)} values such as ${getAllowedTestSeriesAttempts(examLevel).join(', ')}.`,
+        });
+      }
+
       const resolved = await resolveTestSeriesFromIdentifier(testSeriesId, { createIfMissing: false });
       resource = resolved.testSeries;
       parsedSeries = resolved.parsed;
       resourceType = 'testseries';
+      const examLevel = resource?.examLevel || parsedSeries?.examLevel || 'final';
+      if (!isAttemptAllowedForExamLevel(normalizedTestSeriesAttempt, examLevel)) {
+        return res.status(400).json({
+          message: `Invalid attempt for this test series. Use upcoming ${getAttemptSelectionHint(examLevel)} values such as ${getAllowedTestSeriesAttempts(examLevel).join(', ')}.`,
+        });
+      }
     } else if (bookId) {
       resource = await Book.findById(bookId);
       resourceType = 'book';
@@ -239,6 +301,14 @@ export const createEnrollment = async (req, res) => {
     if (!resource && !(resourceType === 'testseries' && parsedSeries?.seriesType)) {
       return res.status(404).json({ message: 'Resource not found' });
     }
+
+    const buildAttemptExpiryDate = (subjects = []) => {
+      if (resourceType !== 'testseries') return null;
+      return getAttemptExpiryDate(normalizedTestSeriesAttempt, {
+        purchasedSubjects: subjects,
+        examLevel: resource?.examLevel || parsedSeries?.examLevel || null,
+      });
+    };
 
     // Check if already enrolled/purchased in THIS SPECIFIC resource only
     // Use sparse index - only check the specific resource type field
@@ -262,18 +332,54 @@ export const createEnrollment = async (req, res) => {
     if (existingEnrollment && existingEnrollment.paymentStatus === 'paid') {
       if (resourceType === 'testseries') {
         const requestedSubjects = uniqueSubjectTokens(req.body?.purchasedSubjects);
-        const alreadyPurchasedSubjects = uniqueSubjectTokens(existingEnrollment.purchasedSubjects);
+        const hasActiveAccess = isTestSeriesEnrollmentActive(existingEnrollment);
+        const hasExpiredAccess = isTestSeriesEnrollmentExpired(existingEnrollment);
 
-        // Legacy rows with empty purchasedSubjects represent full access.
-        if (alreadyPurchasedSubjects.length > 0 && requestedSubjects.length > 0) {
-          const newSubjects = getUnpurchasedSubjects(requestedSubjects, alreadyPurchasedSubjects);
-          if (newSubjects.length > 0) {
-            existingEnrollment.purchasedSubjects = uniqueSubjectTokens([
-              ...alreadyPurchasedSubjects,
-              ...newSubjects,
-            ]);
-            await existingEnrollment.save();
+        if (hasActiveAccess) {
+          const activeAttempt = normalizeTestSeriesAttempt(existingEnrollment.testSeriesAttempt);
+          if (activeAttempt && activeAttempt !== normalizedTestSeriesAttempt) {
+            return res.status(409).json({
+              message: `Current attempt (${activeAttempt}) is still active. You can buy the next attempt after expiry.`,
+            });
           }
+
+          const alreadyPurchasedSubjects = uniqueSubjectTokens(existingEnrollment.purchasedSubjects);
+
+          // Legacy rows with empty purchasedSubjects represent full access.
+          if (alreadyPurchasedSubjects.length > 0 && requestedSubjects.length > 0) {
+            const newSubjects = getUnpurchasedSubjects(requestedSubjects, alreadyPurchasedSubjects);
+            if (newSubjects.length > 0) {
+              existingEnrollment.purchasedSubjects = uniqueSubjectTokens([
+                ...alreadyPurchasedSubjects,
+                ...newSubjects,
+              ]);
+              await existingEnrollment.save();
+            }
+          }
+        } else if (hasExpiredAccess) {
+          if (requestedSubjects.length > 0) {
+            existingEnrollment.purchasedSubjects = requestedSubjects;
+          }
+          const subjectsForExpiry = requestedSubjects.length > 0
+            ? requestedSubjects
+            : uniqueSubjectTokens(existingEnrollment.purchasedSubjects);
+          const attemptExpiryDate = buildAttemptExpiryDate(subjectsForExpiry);
+          if (!attemptExpiryDate) {
+            return res.status(400).json({ message: 'Invalid attempt selection for test series purchase' });
+          }
+          existingEnrollment.testSeriesAttempt = normalizedTestSeriesAttempt;
+          existingEnrollment.expiryDate = attemptExpiryDate;
+          existingEnrollment.pendingPurchasedSubjects = [];
+          existingEnrollment.paymentId = undefined;
+
+          if (req.body && (req.body.paymentStatus === 'paid' || req.body.paymentStatus === 'completed')) {
+            existingEnrollment.paymentStatus = 'paid';
+            existingEnrollment.transactionDate = new Date();
+          } else {
+            existingEnrollment.paymentStatus = 'pending';
+          }
+
+          await existingEnrollment.save();
         }
       }
 
@@ -289,6 +395,7 @@ export const createEnrollment = async (req, res) => {
           populated.testSeriesId = testSeries;
         }
       }
+      syncDerivedAttemptExpiry(populated);
 
       return res.status(200).json(populated);
     }
@@ -297,11 +404,18 @@ export const createEnrollment = async (req, res) => {
       if (resourceType === 'testseries') {
         const requestedSubjects = uniqueSubjectTokens(req.body?.purchasedSubjects);
         if (requestedSubjects.length > 0) {
-          existingEnrollment.purchasedSubjects = uniqueSubjectTokens([
-            ...(Array.isArray(existingEnrollment.purchasedSubjects) ? existingEnrollment.purchasedSubjects : []),
-            ...requestedSubjects,
-          ]);
+          existingEnrollment.purchasedSubjects = requestedSubjects;
         }
+        const subjectsForExpiry = requestedSubjects.length > 0
+          ? requestedSubjects
+          : uniqueSubjectTokens(existingEnrollment.purchasedSubjects);
+        const attemptExpiryDate = buildAttemptExpiryDate(subjectsForExpiry);
+        if (!attemptExpiryDate) {
+          return res.status(400).json({ message: 'Invalid attempt selection for test series purchase' });
+        }
+        existingEnrollment.testSeriesAttempt = normalizedTestSeriesAttempt;
+        existingEnrollment.expiryDate = attemptExpiryDate;
+        existingEnrollment.pendingPurchasedSubjects = [];
       }
 
       // If enrollment exists but not paid, upgrade it when caller requests paid
@@ -328,9 +442,12 @@ export const createEnrollment = async (req, res) => {
             populated.testSeriesId = testSeries;
           }
         }
+        syncDerivedAttemptExpiry(populated);
 
         return res.status(200).json(populated);
       }
+
+      await existingEnrollment.save();
 
       // If enrollment exists but not paid and no upgrade requested, return it
       const populated = await Enrollment.findById(existingEnrollment._id)
@@ -344,6 +461,7 @@ export const createEnrollment = async (req, res) => {
           populated.testSeriesId = testSeries;
         }
       }
+      syncDerivedAttemptExpiry(populated);
 
       return res.status(200).json(populated);
     }
@@ -356,9 +474,18 @@ export const createEnrollment = async (req, res) => {
     if (resourceType === 'course') createObj.courseId = courseId;
     if (resourceType === 'testseries') {
       createObj.testSeriesId = resource?._id || parsedSeries?.fixedKey || String(testSeriesId || '').toLowerCase();
-      if (req.body.purchasedSubjects && Array.isArray(req.body.purchasedSubjects) && req.body.purchasedSubjects.length > 0) {
-        createObj.purchasedSubjects = req.body.purchasedSubjects;
+      createObj.testSeriesAttempt = normalizedTestSeriesAttempt;
+
+      const requestedSubjects = uniqueSubjectTokens(req.body?.purchasedSubjects);
+      if (requestedSubjects.length === 0) {
+        return res.status(400).json({ message: 'Please select at least one subject to continue.' });
       }
+      const attemptExpiryDate = buildAttemptExpiryDate(requestedSubjects);
+      if (!attemptExpiryDate) {
+        return res.status(400).json({ message: 'Invalid attempt selection for test series purchase' });
+      }
+      createObj.expiryDate = attemptExpiryDate;
+      createObj.purchasedSubjects = requestedSubjects;
     }
     if (resourceType === 'book') createObj.bookId = bookId;
 
@@ -367,12 +494,7 @@ export const createEnrollment = async (req, res) => {
       createObj.paymentStatus = 'paid';
       createObj.transactionDate = new Date();
       
-      // Set expiry date for test series (60 days from now)
-      if (resourceType === 'testseries') {
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 60);
-        createObj.expiryDate = expiryDate;
-      }
+      // createObj.expiryDate is already set above for test series.
     }
 
     try {
@@ -411,6 +533,7 @@ export const createEnrollment = async (req, res) => {
           populatedEnrollment.testSeriesId = testSeries;
         }
       }
+      syncDerivedAttemptExpiry(populatedEnrollment);
 
       res.status(201).json(populatedEnrollment);
     } catch (createError) {
@@ -428,6 +551,7 @@ export const createEnrollment = async (req, res) => {
             existing.testSeriesId = testSeries;
           }
         }
+        syncDerivedAttemptExpiry(existing);
 
         if (existing && existing.paymentStatus === 'paid') {
           // If enrollment already exists and is paid, return it as success so callers can proceed.
@@ -562,45 +686,39 @@ export const checkEnrollment = async (req, res) => {
     if (bookId) query.bookId = bookId;
     
     console.log('[CheckEnrollment] Querying with:', query);
-    
-    // Prefer paid enrollments, but return any enrollment (paid/pending) for display
-    const enrollments = await Enrollment.find({ ...query, paymentStatus: 'paid' })
+
+    const allEnrollments = await Enrollment.find(query)
       .populate('courseId', 'title')
       .populate('bookId', 'title')
-      .sort({ createdAt: -1 }); // Most recent first
+      .sort({ createdAt: -1 });
 
-    console.log('[CheckEnrollment] Paid enrollments returned (count):', enrollments.length, 'ids:', enrollments.map(e => e._id));
+    const paidEnrollments = allEnrollments.filter((enrollment) => enrollment.paymentStatus === 'paid');
+    console.log(
+      '[CheckEnrollment] Paid enrollments returned (count):',
+      paidEnrollments.length,
+      'ids:',
+      paidEnrollments.map((enrollment) => enrollment._id)
+    );
 
-    // If no paid enrollments, check for pending/other statuses
-    let allEnrollments = enrollments;
-    if (allEnrollments.length === 0) {
-      allEnrollments = await Enrollment.find(query)
-        .populate('courseId', 'title')
-        .populate('bookId', 'title')
-        .sort({ createdAt: -1 }); // Get most recent
+    const activePaidEnrollments = testSeriesId
+      ? paidEnrollments.filter((enrollment) => isTestSeriesEnrollmentActive(enrollment))
+      : paidEnrollments;
+
+    console.log(
+      '[CheckEnrollment] Active paid enrollments (count):',
+      activePaidEnrollments.length,
+      'ids:',
+      activePaidEnrollments.map((enrollment) => enrollment._id)
+    );
+
+    let rowsForMerged = allEnrollments;
+    if (activePaidEnrollments.length > 0) {
+      rowsForMerged = activePaidEnrollments;
+    } else if (paidEnrollments.length > 0) {
+      rowsForMerged = paidEnrollments;
     }
 
-    console.log(`[CheckEnrollment] Found ${allEnrollments.length} enrollments for query`, query);
-
-    // Merge multiple enrollments for the same resource (user may have purchased subjects in multiple batches)
-    let mergedEnrollment = null;
-    if (allEnrollments.length > 0) {
-      // Use the first (most recent) enrollment as base
-      mergedEnrollment = allEnrollments[0].toObject();
-      
-      // If there are multiple enrollments, merge all purchasedSubjects
-      if (allEnrollments.length > 1) {
-        const allSubjects = new Set();
-        allEnrollments.forEach(enrollment => {
-          if (enrollment.purchasedSubjects && Array.isArray(enrollment.purchasedSubjects)) {
-            enrollment.purchasedSubjects.forEach(subject => allSubjects.add(subject));
-          }
-        });
-        mergedEnrollment.purchasedSubjects = Array.from(allSubjects);
-        console.log('[CheckEnrollment] Merged', allEnrollments.length, 'enrollments. Combined subjects:', mergedEnrollment.purchasedSubjects);
-      }
-    }
-
+    const mergedEnrollment = mergeEnrollmentRows(rowsForMerged);
     console.log('[CheckEnrollment] Final enrollment:', !!mergedEnrollment, 'with subjects:', mergedEnrollment?.purchasedSubjects);
 
     // Manually populate testSeriesId
@@ -610,14 +728,28 @@ export const checkEnrollment = async (req, res) => {
         mergedEnrollment.testSeriesId = testSeries;
       }
     }
+    syncDerivedAttemptExpiry(mergedEnrollment);
 
-    // Return true only if enrollment is paid, but always return enrollment data if exists
-    const isEnrolled = mergedEnrollment && mergedEnrollment.paymentStatus === 'paid';
+    const isExpired = Boolean(
+      testSeriesId &&
+      mergedEnrollment &&
+      mergedEnrollment.paymentStatus === 'paid' &&
+      isTestSeriesEnrollmentExpired(mergedEnrollment)
+    );
+    if (mergedEnrollment && testSeriesId) {
+      mergedEnrollment.isExpired = isExpired;
+      mergedEnrollment.isActiveForAccess = !isExpired && mergedEnrollment.paymentStatus === 'paid';
+    }
 
-    res.json({ 
-      enrolled: isEnrolled, 
+    const isEnrolled = testSeriesId
+      ? activePaidEnrollments.length > 0
+      : Boolean(mergedEnrollment && mergedEnrollment.paymentStatus === 'paid');
+
+    res.json({
+      enrolled: isEnrolled,
       enrollment: mergedEnrollment || null,
-      purchasedSubjects: mergedEnrollment?.purchasedSubjects || [] 
+      purchasedSubjects: mergedEnrollment?.purchasedSubjects || [],
+      isExpired,
     });
   } catch (error) {
     console.error('[CheckEnrollment] Error:', error);

@@ -8,6 +8,7 @@ import { Settings, MapPin, FileText, LogOut, User, Loader2, BookOpen, PlayCircle
 import { toast } from "sonner";
 import { enrollmentsAPI, usersAPI, authAPI } from "@/lib/api";
 import { getFixedSeriesById } from "@/data/fixedTestSeries";
+import { getAttemptExpiryDate, normalizeAttemptLabel } from "@/utils/testSeriesAttempts";
 
 const menuItems = [
   { id: "courses", label: "Mentorship", icon: BookOpen },
@@ -89,6 +90,21 @@ const Dashboard = () => {
 
     try {
       const userData = JSON.parse(userStr);
+      
+      // Check user role and redirect accordingly
+      if (userData.role === 'teacher') {
+        navigate('/teacher');
+        return;
+      }
+      if (userData.role === 'admin') {
+        navigate('/admin');
+        return;
+      }
+      if (userData.role === 'subadmin') {
+        navigate('/subadmin');
+        return;
+      }
+      
       setUser(userData);
 
       // Fetch complete user data including phone number
@@ -148,11 +164,16 @@ const Dashboard = () => {
       setLoading(true);
       const res = await enrollmentsAPI.getAll() as any;
       let processedEnrollments = (res?.enrollments || []).map(enrollment => {
+        const normalizedAttempt = normalizeAttemptLabel(enrollment.testSeriesAttempt);
+        const derivedExpiry = normalizedAttempt ? getAttemptExpiryDate(normalizedAttempt) : null;
         if (enrollment.testSeriesId && typeof enrollment.testSeriesId === 'string') {
           const fixedSeries = getFixedSeriesById(enrollment.testSeriesId);
           if (fixedSeries) {
             enrollment.testSeriesId = fixedSeries;
           }
+        }
+        if (derivedExpiry) {
+          enrollment.expiryDate = derivedExpiry.toISOString();
         }
         return enrollment;
       });
@@ -198,6 +219,7 @@ const Dashboard = () => {
             const newExpiry = enrollment.expiryDate ? new Date(enrollment.expiryDate) : null;
             if (!existingExpiry || (newExpiry && newExpiry > existingExpiry)) {
               existing.expiryDate = enrollment.expiryDate;
+              existing.testSeriesAttempt = enrollment.testSeriesAttempt;
             }
           }
         }
@@ -218,8 +240,9 @@ const Dashboard = () => {
     try {
       const saved = localStorage.getItem('savedResources');
       if (saved) {
+        const resources = JSON.parse(saved);
         // Resources loaded from localStorage
-        return JSON.parse(saved);
+        return resources;
       }
     } catch (err) {
       console.error('Error loading saved resources:', err);
@@ -825,16 +848,22 @@ const Dashboard = () => {
                         const purchaseDate = new Date(enrollment.enrollmentDate);
                         const expiryDate = enrollment.expiryDate ? new Date(enrollment.expiryDate) : new Date(purchaseDate.getTime() + 60 * 24 * 60 * 60 * 1000);
                         const isExpired = new Date() > expiryDate;
+                        const selectedAttempt = enrollment.testSeriesAttempt || 'Attempt not set';
                         const statusBadge = isExpired ? 'Expired' : 'Active';
                         const statusColor = isExpired ? 'bg-red-100 text-red-800 border-red-300' : 'bg-green-100 text-green-800 border-green-300';
 
-                        return (
-                          <div key={enrollment._id}>
-                            {/* Card Container */}
-                            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
-                              {/* Header with Status */}
-                              <div className="p-6 border-b border-gray-200 flex justify-between items-start">
-                                <div>
+	                        return (
+	                          <div key={enrollment._id}>
+	                            {/* Card Container */}
+	                            <div className="relative bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
+	                              {isExpired && (
+	                                <div className="absolute right-[-42px] top-[22px] z-10 rotate-45 bg-red-600 px-12 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-white shadow-md">
+	                                  Section Expired
+	                                </div>
+	                              )}
+	                              {/* Header with Status */}
+	                              <div className="p-6 border-b border-gray-200 flex justify-between items-start">
+	                                <div>
                                   <h3 className="text-lg font-bold text-gray-900">{series?.title || 'Test Series'}</h3>
                                   <div className="flex gap-2 mt-3">
                                     <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor}`}>
@@ -868,26 +897,36 @@ const Dashboard = () => {
                                   </span>
                                 </div>
 
-                                {/* Expiry Date */}
-                                {/* <div className="flex justify-between items-center">
-                                  <span className="text-sm text-gray-600">Expires at:</span>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600">Attempt:</span>
+                                  <span className="text-sm font-medium text-gray-900">{selectedAttempt}</span>
+                                </div>
+
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600">Access till:</span>
                                   <span className="text-sm font-medium text-gray-900">
-                                    {expiryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}, 12:00 AM
+                                    {expiryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                                   </span>
-                                </div> */}
+                                </div>
+
+                                {isExpired && (
+                                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                    Section expired for this Attempt. Buy again for the next Attempt.
+                                  </div>
+                                )}
 
                                 {/* Divider */}
                                 <div className="border-t border-gray-200"></div>
 
                                 {/* Action Button */}
-                                <Button
-                                  onClick={() => navigate(`/testseries/${seriesId}/content`)}
-                                  className="w-full btn-primary mt-2"
-                                >
-                                  View Full Details
-                                </Button>
-                              </div>
-                            </div>
+	                                <Button
+	                                  onClick={() => navigate(isExpired ? `/testseries/${seriesId}` : `/testseries/${seriesId}/content`)}
+	                                  className="w-full btn-primary mt-2"
+	                                >
+	                                  {isExpired ? 'Buy For Next Section' : 'View Full Details'}
+	                                </Button>
+	                              </div>
+	                            </div>
 
 
                           </div>

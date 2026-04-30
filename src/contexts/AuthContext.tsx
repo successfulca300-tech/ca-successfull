@@ -131,6 +131,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         navigate('/admin');
       } else if (role === 'subadmin') {
         navigate('/subadmin');
+      } else if (role === 'teacher') {
+        navigate('/teacher');
       } else {
         navigate('/dashboard');
       }

@@ -48,11 +48,14 @@ import {
   X,
   FolderPlus,
   Tag,
+  Bell,
+  Copy,
+  CheckCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { categories as defaultCategories, resourceTypes } from "@/data/mockData";
-import { resourcesAPI, publishRequestAPI, categoriesAPI, coursesAPI, uploadAPI, testSeriesAnswerAPI } from "@/lib/api";
+import { resourcesAPI, publishRequestAPI, categoriesAPI, coursesAPI, uploadAPI, testSeriesAnswerAPI, copyRequestAPI } from "@/lib/api";
 
 const menuItems = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -164,6 +167,15 @@ const SubAdminDashboard = () => {
     evaluatorComments: ''
   });
   const [uploadingEvaluation, setUploadingEvaluation] = useState(false);
+  const [teachers, setTeachers] = useState<any[]>([]);
+
+  // Copy Request state
+  const [pendingCopyRequests, setPendingCopyRequests] = useState<any[]>([]);
+  const [copyRequestsLoading, setCopyRequestsLoading] = useState(false);
+  const [copyRequestModalOpen, setCopyRequestModalOpen] = useState(false);
+  const [selectedCopyRequest, setSelectedCopyRequest] = useState<any>(null);
+  const [approvingRequest, setApprovingRequest] = useState(false);
+  const [loadingTeachers, setLoadingTeachers] = useState(false);
 
   // Upload form state
   const [uploadForm, setUploadForm] = useState({
@@ -274,6 +286,8 @@ const SubAdminDashboard = () => {
   useEffect(() => {
     if (activeTab === 'answersheets') {
       fetchAnswerSheets();
+      fetchTeachers();
+      fetchPendingCopyRequests();
     }
   }, [activeTab]);
 
@@ -288,6 +302,99 @@ const SubAdminDashboard = () => {
       toast.error(err.message || 'Failed to load answer sheets');
     } finally {
       setLoadingAnswerSheets(false);
+    }
+  };
+
+  const fetchTeachers = async () => {
+    setLoadingTeachers(true);
+    try {
+      const res: any = await testSeriesAnswerAPI.getTeachersList();
+      if (res.teachers) {
+        setTeachers(res.teachers);
+      }
+    } catch (err: any) {
+      console.error('Error fetching teachers:', err);
+    } finally {
+      setLoadingTeachers(false);
+    }
+  };
+
+  const fetchPendingCopyRequests = async () => {
+    setCopyRequestsLoading(true);
+    try {
+      console.log('Fetching pending copy requests...');
+      const res: any = await copyRequestAPI.getPendingRequests();
+      console.log('Copy requests response:', res);
+      
+      if (res && (res.success === undefined || res.success === true)) {
+        const requestsList = res.requests || res.data || [];
+        console.log('Setting pending requests:', requestsList);
+        setPendingCopyRequests(requestsList);
+      } else {
+        console.error('Failed to fetch copy requests:', res?.message);
+      }
+    } catch (err: any) {
+      console.error('Error fetching copy requests:', err);
+    } finally {
+      setCopyRequestsLoading(false);
+    }
+  };
+
+  const handleApproveCopyRequest = async (requestId: string, approvalComment: string) => {
+    setApprovingRequest(true);
+    try {
+      console.log('Approving copy request:', requestId);
+      const res: any = await copyRequestAPI.approveCopyRequest(requestId, approvalComment);
+      console.log('Approve response:', res);
+      
+      if (res && (res.success === undefined || res.success === true)) {
+        toast.success('Copy request approved successfully');
+        setCopyRequestModalOpen(false);
+        setSelectedCopyRequest(null);
+        fetchPendingCopyRequests();
+      } else {
+        toast.error(res?.message || 'Failed to approve request');
+      }
+    } catch (err: any) {
+      console.error('Error approving request:', err);
+      toast.error(err.message || 'Failed to approve request');
+    } finally {
+      setApprovingRequest(false);
+    }
+  };
+
+  const handleDenyCopyRequest = async (requestId: string, reason: string) => {
+    setApprovingRequest(true);
+    try {
+      console.log('Denying copy request:', requestId);
+      const res: any = await copyRequestAPI.denyCopyRequest(requestId, reason);
+      console.log('Deny response:', res);
+      
+      if (res && (res.success === undefined || res.success === true)) {
+        toast.success('Copy request denied');
+        setCopyRequestModalOpen(false);
+        setSelectedCopyRequest(null);
+        fetchPendingCopyRequests();
+      } else {
+        toast.error(res?.message || 'Failed to deny request');
+      }
+    } catch (err: any) {
+      console.error('Error denying request:', err);
+      toast.error(err.message || 'Failed to deny request');
+    } finally {
+      setApprovingRequest(false);
+    }
+  };
+
+  const handleAssignTeacher = async (answerId: string, teacherId: string) => {
+    try {
+      const res: any = await testSeriesAnswerAPI.assignAnswerToTeacher(answerId, teacherId);
+      if (res.success) {
+        toast.success('Answer assigned to teacher successfully');
+        fetchAnswerSheets();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to assign teacher');
     }
   };
 
@@ -1725,13 +1832,32 @@ const SubAdminDashboard = () => {
               {activeTab === "answersheets" && (
                 <div className="bg-card p-6 rounded-xl shadow-lg border border-border">
                   <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="text-xl font-semibold">Users Answersheets</h2>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-semibold">Users Answersheets</h2>
+                        {pendingCopyRequests.length > 0 && (
+                          <span className="inline-flex items-center gap-1 bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
+                            <Bell size={14} />
+                            {pendingCopyRequests.length} Pending
+                          </span>
+                        )}
+                      </div>
                       <p className="text-muted-foreground text-sm mt-1">View and evaluate user answer sheets</p>
                     </div>
-                    <Button onClick={fetchAnswerSheets} variant="outline">
-                      Refresh
-                    </Button>
+                    <div className="flex gap-2">
+                      {pendingCopyRequests.length > 0 && (
+                        <Button 
+                          onClick={() => setCopyRequestModalOpen(true)} 
+                          className="gap-2 bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Copy size={16} />
+                          View Copy Requests ({pendingCopyRequests.length})
+                        </Button>
+                      )}
+                      <Button onClick={fetchAnswerSheets} variant="outline">
+                        Refresh
+                      </Button>
+                    </div>
                   </div>
 
                   {loadingAnswerSheets ? (
@@ -1756,6 +1882,8 @@ const SubAdminDashboard = () => {
                               <TableHead>Submitted</TableHead>
                               <TableHead>Status</TableHead>
                               <TableHead>Marks</TableHead>
+                              <TableHead>Evaluator Comments</TableHead>
+                              <TableHead>Assigned Teacher</TableHead>
                               <TableHead>Actions</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -1811,6 +1939,34 @@ const SubAdminDashboard = () => {
                                   ) : (
                                     <span className="text-muted-foreground">-</span>
                                   )}
+                                </TableCell>
+                                <TableCell>
+                                  {answer.evaluatorComments ? (
+                                    <div className="max-w-xs">
+                                      <p className="text-sm text-gray-700 truncate" title={answer.evaluatorComments}>
+                                        {answer.evaluatorComments}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        by {answer.evaluatedBy?.name || 'Teacher'}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">-</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Select value={answer.assignedToTeacher?._id || ''} onValueChange={(value) => handleAssignTeacher(answer._id, value)}>
+                                    <SelectTrigger className="w-[150px]">
+                                      <SelectValue placeholder={answer.assignedToTeacher?.name || 'Assign'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {teachers.map((teacher: any) => (
+                                        <SelectItem key={teacher._id} value={teacher._id}>
+                                          {teacher.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-2">
@@ -2084,6 +2240,109 @@ const SubAdminDashboard = () => {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Copy Requests Modal */}
+      <Dialog open={copyRequestModalOpen} onOpenChange={setCopyRequestModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Copy size={20} />
+              Pending Copy Requests ({pendingCopyRequests.length})
+            </DialogTitle>
+          </DialogHeader>
+
+          {copyRequestsLoading ? (
+            <div className="text-center py-12">
+              <Loader2 className="mx-auto animate-spin text-muted-foreground mb-4" size={48} />
+              <p className="text-muted-foreground">Loading requests...</p>
+            </div>
+          ) : pendingCopyRequests.length === 0 ? (
+            <div className="text-center py-8">
+              <CheckCheck size={48} className="mx-auto text-green-500 mb-4" />
+              <p className="text-muted-foreground text-lg">No pending copy requests</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {pendingCopyRequests.map((request: any) => (
+                <div key={request._id} className="border border-border rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-lg">{request.teacherId?.name || 'Unknown Teacher'}</h3>
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+                          Request #{request.requestNumber}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{request.teacherId?.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-blue-600">{request.numberOfCopies}</p>
+                      <p className="text-xs text-muted-foreground">Copies Requested</p>
+                    </div>
+                  </div>
+
+                  {request.reason && (
+                    <div className="mb-3 pb-3 border-b border-border">
+                      <p className="text-xs text-muted-foreground font-semibold">REASON</p>
+                      <p className="text-sm text-gray-700 mt-1">{request.reason}</p>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Requested on {new Date(request.createdAt).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+
+                  <div className="w-full flex gap-2 mt-4">
+                    <Button
+                      size="sm"
+                      className="w-1/2 bg-blue-600 hover:bg-blue-700 gap-2 text-white"
+                      onClick={() => handleApproveCopyRequest(request._id, '')}
+                      disabled={approvingRequest}
+                    >
+                      {approvingRequest ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={14} />
+                          Approve
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="w-1/2 gap-2"
+                      onClick={() => handleDenyCopyRequest(request._id, 'Denied by SubAdmin')}
+                      disabled={approvingRequest}
+                    >
+                      {approvingRequest ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <XCircle size={14} />
+                          Deny
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

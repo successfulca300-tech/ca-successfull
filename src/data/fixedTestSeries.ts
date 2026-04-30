@@ -134,7 +134,7 @@ Coverage:
       series1UploadDate: 'Papers will be uploaded from 1st February 2025',
       series2UploadDate: 'Papers will be uploaded from 7th March 2026',
       series3UploadDate: 'Papers will be uploaded from 5th April 2026',
-      group1SubmissionDate: '25th April 2026',
+      group1SubmissionDate: '26th April 2026',
       group2SubmissionDate: '30th April 2026',
     },
     papersPerSubject: {
@@ -239,7 +239,7 @@ Coverage:
 - Ideal for targeted preparation
     `,
     seriesDates: {
-      group1SubmissionDate: '25th April 2026',
+      group1SubmissionDate: '26th April 2026',
       group2SubmissionDate: '30th April 2026',
     },
     papersPerSubject: {
@@ -322,7 +322,7 @@ Coverage:
 - Perfect for last-minute revision
     `,
     seriesDates: {
-      group1SubmissionDate: '25th April 2026',
+      group1SubmissionDate: '26th April 2026',
       group2SubmissionDate: '30th April 2026',
     },
     papersPerSubject: {
@@ -413,7 +413,7 @@ Coverage:
 - Perfect all-in-one test series
     `,
     seriesDates: {
-      group1SubmissionDate: '25th April 2026',
+      group1SubmissionDate: '26th April 2026',
       group2SubmissionDate: '30th April 2026',
     },
     papersPerSubject: {
@@ -705,7 +705,7 @@ Question papers as per ICAI marking scheme
 Detailed answer keys provided`,
     seriesType: 'S4',
     seriesTypeLabel: 'CA Successful Specials',
-    price: 1600,
+    price: 1400,
     mode: 'Online',
     group: 'Both',
     subjects: ['Advance accounting', 'Corporate law', 'Taxation', 'Costing', 'Audit', 'FM SM'],

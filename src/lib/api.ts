@@ -73,13 +73,15 @@ export const authAPI = {
     address: string;
     role?: string;
   }) => {
-    return apiRequest<{
+    const data = await apiRequest<{
       message: string;
       userId: string;
     }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+
+    return data;
   },
 
   login: async (email: string, password: string) => {
@@ -923,6 +925,50 @@ export const testSeriesAnswerAPI = {
   getPaperStatistics: async (paperId: string) => {
     return apiRequest(`/testseries/answers/papers/${paperId}/statistics`);
   },
+
+  getTeachersList: async () => {
+    return apiRequest('/testseries/answers/teachers/list');
+  },
+
+  assignAnswerToTeacher: async (answerId: string, teacherId: string) => {
+    return apiRequest(`/testseries/answers/${answerId}/assign-teacher`, {
+      method: 'POST',
+      body: JSON.stringify({ teacherId }),
+    });
+  },
+
+  getTeacherAssignedAnswers: async () => {
+    return apiRequest('/testseries/answers/teacher/assigned');
+  },
+
+  uploadTeacherEvaluatedSheet: async (answerId: string, file: File, marksObtained: number, maxMarks: number, evaluatorComments?: string) => {
+    const formData = new FormData();
+    formData.append('evaluatedSheet', file);
+    formData.append('marksObtained', String(marksObtained));
+    formData.append('maxMarks', String(maxMarks));
+    if (evaluatorComments) {
+      formData.append('evaluatorComments', evaluatorComments);
+    }
+
+    const token = localStorage.getItem('token');
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_URL}/testseries/answers/${answerId}/teacher-evaluated`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.message || 'Failed to upload evaluated sheet');
+    }
+
+    return response.json();
+  },
 };
 
 // Enrollments API
@@ -1358,5 +1404,52 @@ export const settingsAPI = {
     const text = await response.text();
     throw new Error(text || 'Failed to update settings');
   }
+};
+
+// Copy Request API
+export const copyRequestAPI = {
+  requestMoreCopies: async (numberOfCopies: number, reason?: string) => {
+    return apiRequest('/copy-requests/request', {
+      method: 'POST',
+      body: JSON.stringify({ numberOfCopies, reason }),
+    });
+  },
+
+  getPendingRequests: async () => {
+    return apiRequest('/copy-requests/pending');
+  },
+
+  approveCopyRequest: async (requestId: string, approvalComment?: string) => {
+    return apiRequest(`/copy-requests/${requestId}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify({ approvalComment }),
+    });
+  },
+
+  denyCopyRequest: async (requestId: string, reason?: string) => {
+    return apiRequest(`/copy-requests/${requestId}/deny`, {
+      method: 'PUT',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  getTeacherStats: async () => {
+    return apiRequest('/copy-requests/admin/teachers-stats');
+  },
+
+  updateTeacherRating: async (teacherId: string, rating: number, feedback?: string, warnings?: any[]) => {
+    return apiRequest(`/copy-requests/admin/teacher/${teacherId}/rating`, {
+      method: 'PUT',
+      body: JSON.stringify({ rating, feedback, warnings }),
+    });
+  },
+
+  getTeacherFeedback: async () => {
+    return apiRequest('/copy-requests/teacher/feedback');
+  },
+
+  getTeacherEvaluations: async (teacherId: string) => {
+    return apiRequest(`/copy-requests/admin/teacher/${teacherId}/evaluations`);
+  },
 };
 

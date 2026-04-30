@@ -57,3 +57,21 @@ export const subadmin = (req, res, next) => {
   }
 };
 
+// Teacher middleware
+export const teacher = (req, res, next) => {
+  if (req.user && req.user.role === 'teacher') {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied. Teacher only.' });
+  }
+};
+
+// Teacher or subadmin middleware
+export const teacherOrSubadmin = (req, res, next) => {
+  if (req.user && (req.user.role === 'teacher' || req.user.role === 'subadmin' || req.user.role === 'admin')) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied. Teacher or Sub-admin only.' });
+  }
+};
+

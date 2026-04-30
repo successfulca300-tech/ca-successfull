@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import { isTestSeriesEnrollmentActive } from '../utils/testSeriesAttempt.js';
 
 function htmlPage(title = 'File not available', message = 'The requested file is not available.', detail = '') {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#0f172a;"><div style="max-width:720px;padding:28px;border-radius:8px;background:#fff;border:1px solid #e6edf3;box-shadow:0 6px 24px rgba(2,6,23,0.04);"><h1 style="margin:0 0 8px;font-size:20px">${title}</h1><p style="margin:0 0 12px;color:#475569">${message}</p>${detail ? `<p style="margin:0;font-size:13px;color:#94a3b8">${detail}</p>` : ''}</div></body></html>`;
@@ -37,6 +38,142 @@ function sanitizeDownloadFileName(rawName) {
   return `${cleaned}.pdf`;
 }
 
+const addTestSeriesCandidate = (set, value) => {
+  if (!value) return;
+  const raw = String(value).trim();
+  if (!raw) return;
+  if (mongoose.Types.ObjectId.isValid(raw)) {
+    set.add(new mongoose.Types.ObjectId(raw));
+  } else {
+    set.add(raw);
+  }
+};
+
+const buildTestSeriesQuery = async (tsParam) => {
+  if (!tsParam) return { testSeriesId: tsParam };
+
+  const TestSeriesModel = (await import('../models/TestSeries.js')).default;
+  const candidates = new Set();
+
+  if (mongoose.Types.ObjectId.isValid(tsParam)) {
+    addTestSeriesCandidate(candidates, tsParam);
+    addTestSeriesCandidate(candidates, String(tsParam));
+    try {
+      const ts = await TestSeriesModel.findById(tsParam).select('fixedKey seriesType');
+      if (ts?.fixedKey) addTestSeriesCandidate(candidates, String(ts.fixedKey).toLowerCase());
+      const isInterScoped = String(ts?.fixedKey || '').toLowerCase().startsWith('inter-');
+      if (ts?.seriesType && !isInterScoped) {
+        addTestSeriesCandidate(candidates, String(ts.seriesType).toLowerCase());
+        addTestSeriesCandidate(candidates, String(ts.seriesType).toUpperCase());
+      }
+    } catch (_) {}
+  } else {
+    const raw = String(tsParam || '').trim().toLowerCase();
+    const parts = raw.split('-').filter(Boolean);
+    const seriesToken = parts.length > 0 ? parts[parts.length - 1] : raw;
+    const seriesType = ['s1', 's2', 's3', 's4'].includes(seriesToken) ? seriesToken.toUpperCase() : null;
+    const examLevel = raw.startsWith('inter-') ? 'inter' : 'final';
+    const isInterScoped = raw.startsWith('inter-');
+    const escapedRaw = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    addTestSeriesCandidate(candidates, raw);
+
+    let ts = await TestSeriesModel.findOne({
+      fixedKey: { $regex: `^${escapedRaw}$`, $options: 'i' },
+    }).select('_id fixedKey seriesType');
+
+    if (!ts && seriesType) {
+      ts = await TestSeriesModel.findOne({ seriesType, examLevel }).select('_id fixedKey seriesType');
+    }
+    if (!ts && seriesType) {
+      ts = await TestSeriesModel.findOne({ seriesType }).select('_id fixedKey seriesType');
+    }
+
+    if (ts) {
+      addTestSeriesCandidate(candidates, ts._id);
+      if (ts.fixedKey) addTestSeriesCandidate(candidates, String(ts.fixedKey).toLowerCase());
+      const tsInterScoped = String(ts.fixedKey || '').toLowerCase().startsWith('inter-') || isInterScoped;
+      if (ts.seriesType && !tsInterScoped) {
+        addTestSeriesCandidate(candidates, String(ts.seriesType).toLowerCase());
+        addTestSeriesCandidate(candidates, String(ts.seriesType).toUpperCase());
+      }
+    } else if (seriesType && !isInterScoped) {
+      addTestSeriesCandidate(candidates, seriesType.toLowerCase());
+      addTestSeriesCandidate(candidates, seriesType.toUpperCase());
+    }
+  }
+
+  const normalizedCandidates = Array.from(candidates);
+  if (normalizedCandidates.length === 0) return { testSeriesId: tsParam };
+  if (normalizedCandidates.length === 1) return { testSeriesId: normalizedCandidates[0] };
+  return { $or: normalizedCandidates.map((candidate) => ({ testSeriesId: candidate })) };
+};
+
+const verifyFileAccess = async ({ userId, fileId, fileUrl, courseId, testSeriesId, bookId }) => {
+  const Enrollment = (await import('../models/Enrollment.js')).default;
+  let allowed = false;
+  let requiredSubject = null;
+
+  if (courseId) {
+    const enrollment = await Enrollment.findOne({ userId, courseId, paymentStatus: 'paid' });
+    if (enrollment) allowed = true;
+  }
+
+  if (fileId || fileUrl) {
+    const TestSeriesPaper = (await import('../models/TestSeriesPaper.js')).default;
+    let paperFound = null;
+
+    if (fileId) paperFound = await TestSeriesPaper.findOne({ appwriteFileId: fileId });
+    if (!paperFound && fileUrl) paperFound = await TestSeriesPaper.findOne({ publicFileUrl: fileUrl });
+    if (!paperFound && fileUrl) {
+      const match = String(fileUrl).match(/\/files\/([^\/]+)\/view/);
+      if (match) {
+        paperFound = await TestSeriesPaper.findOne({ appwriteFileId: match[1] });
+      }
+    }
+
+    if (paperFound) {
+      requiredSubject = paperFound.subject;
+      const tsQuery = await buildTestSeriesQuery(paperFound.testSeriesId);
+      const paidEnrollments = await Enrollment.find({ userId, paymentStatus: 'paid', ...tsQuery });
+      const activePaidEnrollments = paidEnrollments.filter((enrollment) => isTestSeriesEnrollmentActive(enrollment));
+
+      if (activePaidEnrollments.length > 0) {
+        const allSubjects = new Set();
+        for (const enrollment of activePaidEnrollments) {
+          if (Array.isArray(enrollment.purchasedSubjects)) {
+            enrollment.purchasedSubjects.forEach((subject) => allSubjects.add(subject));
+          }
+        }
+        const mergedSubjects = Array.from(allSubjects);
+        if (mergedSubjects.length === 0) {
+          allowed = true;
+        } else {
+          const subjectAllowed = mergedSubjects.some((subject) => (
+            subject === requiredSubject || subject.endsWith(`-${requiredSubject}`)
+          ));
+          if (subjectAllowed) allowed = true;
+        }
+      }
+    }
+  }
+
+  if (!allowed && testSeriesId) {
+    const tsQuery = await buildTestSeriesQuery(testSeriesId);
+    const paidEnrollments = await Enrollment.find({ userId, paymentStatus: 'paid', ...tsQuery });
+    if (paidEnrollments.some((enrollment) => isTestSeriesEnrollmentActive(enrollment))) {
+      allowed = true;
+    }
+  }
+
+  if (bookId) {
+    const enrollment = await Enrollment.findOne({ userId, bookId, paymentStatus: 'paid' });
+    if (enrollment) allowed = true;
+  }
+
+  return { allowed, requiredSubject };
+};
+
 // POST /api/files/token
 // Body: { fileId, courseId?, testSeriesId?, bookId? }
 export const generateFileViewToken = async (req, res) => {
@@ -54,147 +191,14 @@ export const generateFileViewToken = async (req, res) => {
       return res.status(401).set('Content-Type', 'text/html').send(html);
     }
 
-    // If any resource id provided, verify enrollment
-    const Enrollment = (await import('../models/Enrollment.js')).default;
-    let allowed = false;
-
-    // Helper to build flexible query for testSeries (match ObjectId or shorthand string)
-    const buildTestSeriesQuery = async (tsParam) => {
-      if (!tsParam) return { testSeriesId: tsParam };
-
-      const TestSeriesModel = (await import('../models/TestSeries.js')).default;
-      const addCandidate = (set, value) => {
-        if (!value) return;
-        const raw = String(value).trim();
-        if (!raw) return;
-        if (mongoose.Types.ObjectId.isValid(raw)) {
-          set.add(new mongoose.Types.ObjectId(raw));
-        } else {
-          set.add(raw);
-        }
-      };
-
-      const candidates = new Set();
-
-      if (mongoose.Types.ObjectId.isValid(tsParam)) {
-        addCandidate(candidates, tsParam);
-        addCandidate(candidates, String(tsParam));
-        try {
-          const ts = await TestSeriesModel.findById(tsParam).select('fixedKey seriesType');
-          if (ts?.fixedKey) addCandidate(candidates, String(ts.fixedKey).toLowerCase());
-          const isInterScoped = String(ts?.fixedKey || '').toLowerCase().startsWith('inter-');
-          if (ts?.seriesType && !isInterScoped) {
-            addCandidate(candidates, String(ts.seriesType).toLowerCase());
-            addCandidate(candidates, String(ts.seriesType).toUpperCase());
-          }
-        } catch (_) {}
-      } else {
-        const raw = String(tsParam || '').trim().toLowerCase();
-        const parts = raw.split('-').filter(Boolean);
-        const seriesToken = parts.length > 0 ? parts[parts.length - 1] : raw;
-        const seriesType = ['s1', 's2', 's3', 's4'].includes(seriesToken) ? seriesToken.toUpperCase() : null;
-        const examLevel = raw.startsWith('inter-') ? 'inter' : 'final';
-        const isInterScoped = raw.startsWith('inter-');
-        const escapedRaw = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-        addCandidate(candidates, raw);
-
-        let ts = await TestSeriesModel.findOne({
-          fixedKey: { $regex: `^${escapedRaw}$`, $options: 'i' },
-        }).select('_id fixedKey seriesType');
-
-        if (!ts && seriesType) {
-          ts = await TestSeriesModel.findOne({ seriesType, examLevel }).select('_id fixedKey seriesType');
-        }
-        if (!ts && seriesType) {
-          ts = await TestSeriesModel.findOne({ seriesType }).select('_id fixedKey seriesType');
-        }
-
-        if (ts) {
-          addCandidate(candidates, ts._id);
-          if (ts.fixedKey) addCandidate(candidates, String(ts.fixedKey).toLowerCase());
-          const tsInterScoped = String(ts.fixedKey || '').toLowerCase().startsWith('inter-') || isInterScoped;
-          if (ts.seriesType && !tsInterScoped) {
-            addCandidate(candidates, String(ts.seriesType).toLowerCase());
-            addCandidate(candidates, String(ts.seriesType).toUpperCase());
-          }
-        } else if (seriesType && !isInterScoped) {
-          addCandidate(candidates, seriesType.toLowerCase());
-          addCandidate(candidates, seriesType.toUpperCase());
-        }
-      }
-
-      const normalizedCandidates = Array.from(candidates);
-      if (normalizedCandidates.length === 0) return { testSeriesId: tsParam };
-      if (normalizedCandidates.length === 1) return { testSeriesId: normalizedCandidates[0] };
-      return { $or: normalizedCandidates.map((candidate) => ({ testSeriesId: candidate })) };
-    };
-
-    if (courseId) {
-      const e = await Enrollment.findOne({ userId: user._id, courseId, paymentStatus: 'paid' });
-      if (e) allowed = true;
-    }
-
-    // If a file is a test series paper, enforce purchased-subject level access
-    let requiredSubject = null;
-    let paperFound = null;
-    if (fileId || fileUrl) {
-      const TestSeriesPaper = (await import('../models/TestSeriesPaper.js')).default;
-      // Try matching by appwriteFileId
-      if (fileId) paperFound = await TestSeriesPaper.findOne({ appwriteFileId: fileId });
-      // If not found, try matching by publicFileUrl
-      if (!paperFound && fileUrl) paperFound = await TestSeriesPaper.findOne({ publicFileUrl: fileUrl });
-      // If still not found, try extracting fileId from URL and matching
-      if (!paperFound && fileUrl) {
-        const match = String(fileUrl).match(/\/files\/([^\/]+)\/view/);
-        if (match) {
-          const extracted = match[1];
-          paperFound = await TestSeriesPaper.findOne({ appwriteFileId: extracted });
-        }
-      }
-
-      if (paperFound) {
-        requiredSubject = paperFound.subject;
-        console.log('[FileView] Paper found', { paperId: paperFound._id, subject: requiredSubject, paperTestSeriesId: paperFound.testSeriesId });
-        // Resolve the testSeriesId for the paper (use DB id if present)
-        const paperTsId = paperFound.testSeriesId;
-        const tsQuery = await buildTestSeriesQuery(paperTsId);
-        // Find all paid enrollments matching testSeriesId
-        const paidEnrollments = await Enrollment.find({ userId: user._id, paymentStatus: 'paid', ...tsQuery });
-        console.log('[FileView] Paid enrollments for paper found (count):', paidEnrollments.length, 'ids:', paidEnrollments.map(e => e._id));
-        if (paidEnrollments && paidEnrollments.length > 0) {
-          // Merge purchasedSubjects
-          const allSubjects = new Set();
-          for (const en of paidEnrollments) {
-            if (en.purchasedSubjects && Array.isArray(en.purchasedSubjects)) {
-              en.purchasedSubjects.forEach(s => allSubjects.add(s));
-            }
-          }
-          const merged = Array.from(allSubjects);
-          console.log('[FileView] Merged purchasedSubjects for user:', merged);
-          // If no purchasedSubjects, treat as full access
-          if (merged.length === 0) {
-            allowed = true;
-          } else {
-            // purchasedSubjects entries might be like 'series1-FR'
-            const subjectAllowed = merged.some(ps => ps === requiredSubject || ps.endsWith('-' + requiredSubject));
-            console.log('[FileView] subjectAllowed?', subjectAllowed);
-            if (subjectAllowed) allowed = true;
-          }
-        }
-      }
-    }
-
-    if (!allowed && testSeriesId) {
-      const tsQuery = await buildTestSeriesQuery(testSeriesId);
-      const e = await Enrollment.findOne({ userId: user._id, paymentStatus: 'paid', ...tsQuery });
-      if (e) allowed = true;
-    }
-
-    if (bookId) {
-      const e = await Enrollment.findOne({ userId: user._id, bookId, paymentStatus: 'paid' });
-      if (e) allowed = true;
-    }
+    const { allowed, requiredSubject } = await verifyFileAccess({
+      userId: user._id,
+      fileId,
+      fileUrl,
+      courseId,
+      testSeriesId,
+      bookId,
+    });
 
     console.log('[FileView] Access check result:', { allowed, user: user._id, fileId, fileUrl, testSeriesId, requiredSubject });
 
@@ -211,7 +215,12 @@ export const generateFileViewToken = async (req, res) => {
     }
 
     // Sign both fileId and fileUrl (if present) into the token so proxy can determine source
-    const tokenPayload = {};
+    const tokenPayload = {
+      userId: String(user._id),
+      courseId: courseId || undefined,
+      testSeriesId: testSeriesId || undefined,
+      bookId: bookId || undefined,
+    };
     if (fileId) tokenPayload.fileId = fileId;
     if (fileUrl) tokenPayload.fileUrl = fileUrl;
 
@@ -252,7 +261,21 @@ export const proxyFileView = async (req, res) => {
       return res.status(401).set('Content-Type', 'text/html').send(html);
     }
 
-    const { fileId, fileUrl } = payload;
+    const { fileId, fileUrl, userId, courseId, testSeriesId, bookId } = payload;
+    if (!userId) {
+      const html = htmlPage('Access denied', 'The file link is incomplete. Please reopen the file from your dashboard.');
+      return res.status(403).set('Content-Type', 'text/html').send(html);
+    }
+
+    const recheck = await verifyFileAccess({ userId, fileId, fileUrl, courseId, testSeriesId, bookId });
+    if (!recheck.allowed) {
+      const html = htmlPage(
+        'Access expired',
+        'Your access to this file is no longer active. Please buy again for the next attempt.'
+      );
+      return res.status(403).set('Content-Type', 'text/html').send(html);
+    }
+
     const APPWRITE_API_KEY = process.env.APPWRITE_API_KEY;
 
     let url;

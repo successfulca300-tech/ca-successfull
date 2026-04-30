@@ -6,6 +6,15 @@ import TestSeries from '../models/TestSeries.js';
 import Book from '../models/Book.js';
 import Cart from '../models/Cart.js';
 import mongoose from 'mongoose';
+import {
+  getAllowedTestSeriesAttempts,
+  getAttemptSelectionHint,
+  isAttemptAllowedForExamLevel,
+  normalizeTestSeriesAttempt,
+  getAttemptExpiryDate,
+  isTestSeriesEnrollmentActive,
+  isTestSeriesEnrollmentExpired,
+} from '../utils/testSeriesAttempt.js';
 
 const getSeriesTypeLabel = (seriesType, examLevel = 'final') => {
   if (seriesType === 'S1') return 'Full Syllabus';
@@ -124,8 +133,24 @@ function getRazorpayInstance() {
 // POST /api/payments/create-order
 export const createOrder = async (req, res) => {
   try {
-    const { courseId, mentorshipId, testSeriesId, bookId, amount, purchasedSubjects, mentorshipPapers } = req.body;
-    console.log('[Payment] createOrder called with:', { mentorshipId, mentorshipPapers, testSeriesId, amount, purchasedSubjects });
+    const {
+      courseId,
+      mentorshipId,
+      testSeriesId,
+      bookId,
+      amount,
+      purchasedSubjects,
+      mentorshipPapers,
+      testSeriesAttempt,
+    } = req.body;
+    console.log('[Payment] createOrder called with:', {
+      mentorshipId,
+      mentorshipPapers,
+      testSeriesId,
+      amount,
+      purchasedSubjects,
+      testSeriesAttempt,
+    });
     
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     if (req.user.role === 'admin' || req.user.role === 'subadmin') {
@@ -138,6 +163,7 @@ export const createOrder = async (req, res) => {
     if (!resourceType || !resourceId || amount === undefined) return res.status(400).json({ message: 'resource id and amount required' });
     let resolvedTestSeries = null;
     let parsedTestSeries = null;
+    let normalizedTestSeriesAttempt = null;
 
     // Validate amount
     if (typeof amount !== 'number' || amount <= 0) {
@@ -149,11 +175,25 @@ export const createOrder = async (req, res) => {
       const course = await Course.findById(resourceId);
       if (!course) return res.status(404).json({ message: 'Course not found' });
     } else if (resourceType === 'testseries') {
+      normalizedTestSeriesAttempt = normalizeTestSeriesAttempt(testSeriesAttempt);
+      if (!normalizedTestSeriesAttempt) {
+        const examLevel = resolvedTestSeries?.examLevel || parsedTestSeries?.examLevel || 'final';
+        return res.status(400).json({
+          message: `Attempt is required for test series purchase. Use upcoming ${getAttemptSelectionHint(examLevel)} values such as ${getAllowedTestSeriesAttempts(examLevel).join(', ')}.`,
+        });
+      }
+
       const resolved = await resolveTestSeriesFromIdentifier(resourceId, {
         createIfMissing: false,
       });
       resolvedTestSeries = resolved.testSeries;
       parsedTestSeries = resolved.parsed;
+      const examLevel = resolvedTestSeries?.examLevel || parsedTestSeries?.examLevel || 'final';
+      if (!isAttemptAllowedForExamLevel(normalizedTestSeriesAttempt, examLevel)) {
+        return res.status(400).json({
+          message: `Invalid attempt for this test series. Use upcoming ${getAttemptSelectionHint(examLevel)} values such as ${getAllowedTestSeriesAttempts(examLevel).join(', ')}.`,
+        });
+      }
       if (!resolvedTestSeries && !parsedTestSeries?.seriesType) {
         return res.status(404).json({ message: 'Test series not found' });
       }
@@ -200,9 +240,24 @@ export const createOrder = async (req, res) => {
         await enrollment.save();
       }
     }
+
+    const hasActiveTestSeriesEnrollment =
+      resourceType === 'testseries' && enrollment && isTestSeriesEnrollmentActive(enrollment);
+    const hasExpiredTestSeriesEnrollment =
+      resourceType === 'testseries' && enrollment && isTestSeriesEnrollmentExpired(enrollment);
+
+    if (hasActiveTestSeriesEnrollment && enrollment?.testSeriesAttempt) {
+      const activeAttempt = normalizeTestSeriesAttempt(enrollment.testSeriesAttempt);
+      if (activeAttempt && activeAttempt !== normalizedTestSeriesAttempt) {
+        return res.status(409).json({
+          message: `Current attempt (${activeAttempt}) is still active. You can buy the next attempt after expiry.`,
+        });
+      }
+    }
+
     let testSeriesAddonPurchase = false;
     let testSeriesSubjectsToPurchase = uniqueSubjectTokens(purchasedSubjects);
-    if (resourceType === 'testseries' && enrollment && enrollment.paymentStatus === 'paid') {
+    if (resourceType === 'testseries' && hasActiveTestSeriesEnrollment) {
       const alreadyPurchasedSubjects = uniqueSubjectTokens(enrollment.purchasedSubjects);
       // Legacy rows with empty purchasedSubjects mean full access was already bought.
       if (alreadyPurchasedSubjects.length === 0) {
@@ -222,7 +277,11 @@ export const createOrder = async (req, res) => {
       testSeriesSubjectsToPurchase = unpurchasedSubjects;
       console.log('[Payment] Allowing test series add-on purchase for subjects:', testSeriesSubjectsToPurchase);
     }
-    if (enrollment && enrollment.paymentStatus === 'paid' && !(resourceType === 'testseries' && testSeriesAddonPurchase)) {
+    if (
+      enrollment &&
+      enrollment.paymentStatus === 'paid' &&
+      !(resourceType === 'testseries' && (testSeriesAddonPurchase || hasExpiredTestSeriesEnrollment))
+    ) {
       return res.status(409).json({ message: 'You have already purchased this plan/resource.' });
     }
 
@@ -242,7 +301,23 @@ export const createOrder = async (req, res) => {
     }
     if (resourceType === 'testseries') {
       const storeTestSeriesId = resolvedTestSeries?._id || parsedTestSeries?.fixedKey || String(resourceId || '').toLowerCase();
+      const subjectsForExpiry = testSeriesAddonPurchase
+        ? uniqueSubjectTokens([
+            ...(Array.isArray(enrollment?.purchasedSubjects) ? enrollment.purchasedSubjects : []),
+            ...testSeriesSubjectsToPurchase,
+          ])
+        : testSeriesSubjectsToPurchase;
+      const attemptExpiryDate = getAttemptExpiryDate(normalizedTestSeriesAttempt, {
+        purchasedSubjects: subjectsForExpiry,
+        examLevel: resolvedTestSeries?.examLevel || parsedTestSeries?.examLevel || null,
+      });
+      if (!attemptExpiryDate) {
+        return res.status(400).json({ message: 'Invalid attempt selection for test series purchase' });
+      }
+
       createObj.testSeriesId = storeTestSeriesId;
+      createObj.testSeriesAttempt = normalizedTestSeriesAttempt;
+      createObj.expiryDate = attemptExpiryDate;
       console.log('[Payment] Storing testSeriesId in enrollment:', storeTestSeriesId, '(resolved record id:', resolvedTestSeries?._id || null, ')');
 
       if (testSeriesAddonPurchase) {
@@ -255,8 +330,7 @@ export const createOrder = async (req, res) => {
         createObj.purchasedSubjects = testSeriesSubjectsToPurchase;
         console.log('[Payment] Saving purchasedSubjects to enrollment:', testSeriesSubjectsToPurchase);
       } else {
-        createObj.pendingPurchasedSubjects = [];
-        console.log('[Payment] WARNING: No purchasedSubjects received or invalid format');
+        return res.status(400).json({ message: 'Please select at least one subject to continue.' });
       }
     }
     if (resourceType === 'book') createObj.bookId = resourceId;
@@ -267,6 +341,10 @@ export const createOrder = async (req, res) => {
         ...createObj,
       });
     } else {
+      if (resourceType === 'testseries' && hasExpiredTestSeriesEnrollment) {
+        enrollment.paymentId = undefined;
+        enrollment.transactionDate = undefined;
+      }
       Object.assign(enrollment, createObj);
       await enrollment.save();
     }
@@ -275,6 +353,7 @@ export const createOrder = async (req, res) => {
       id: enrollment._id, 
       mentorshipId: enrollment.mentorshipId,
       testSeriesId: enrollment.testSeriesId,
+      testSeriesAttempt: enrollment.testSeriesAttempt,
       purchasedSubjects: enrollment.purchasedSubjects,
       pendingPurchasedSubjects: enrollment.pendingPurchasedSubjects,
       paymentStatus: enrollment.paymentStatus 
@@ -291,7 +370,13 @@ export const createOrder = async (req, res) => {
       amount: Math.round(amount * 100), // paise
       currency: 'INR',
       receipt: `rcpt_${enrollment._id}`,
-      notes: { enrollmentId: enrollment._id.toString(), resourceType, resourceId: resourceId.toString(), userId: req.user._id.toString() },
+      notes: {
+        enrollmentId: enrollment._id.toString(),
+        resourceType,
+        resourceId: resourceId.toString(),
+        userId: req.user._id.toString(),
+        ...(resourceType === 'testseries' ? { testSeriesAttempt: normalizedTestSeriesAttempt } : {}),
+      },
     };
 
     const order = await instance.orders.create(options);
@@ -346,15 +431,32 @@ export const verifyPayment = async (req, res) => {
       ]);
       enrollment.pendingPurchasedSubjects = [];
     }
-    if (enrollment.testSeriesId && !enrollment.expiryDate) {
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 60);
-      enrollment.expiryDate = expiryDate;
+    if (enrollment.testSeriesId) {
+      const normalizedAttempt = normalizeTestSeriesAttempt(enrollment.testSeriesAttempt);
+      if (normalizedAttempt) {
+        let examLevel = null;
+        if (mongoose.Types.ObjectId.isValid(enrollment.testSeriesId)) {
+          const ts = await TestSeries.findById(enrollment.testSeriesId).select('examLevel');
+          examLevel = ts?.examLevel || null;
+        }
+        enrollment.testSeriesAttempt = normalizedAttempt;
+        enrollment.expiryDate = getAttemptExpiryDate(normalizedAttempt, {
+          purchasedSubjects: enrollment.purchasedSubjects,
+          examLevel,
+        });
+      } else if (!enrollment.expiryDate) {
+        // Legacy fallback for old rows created before attempt-based expiry rollout.
+        const fallbackExpiry = new Date();
+        fallbackExpiry.setDate(fallbackExpiry.getDate() + 60);
+        enrollment.expiryDate = fallbackExpiry;
+      }
     }
     await enrollment.save();
 
     console.log('[Payment] Enrollment after payment update:', { 
       id: enrollment._id, 
+      testSeriesAttempt: enrollment.testSeriesAttempt,
+      expiryDate: enrollment.expiryDate,
       purchasedSubjects: enrollment.purchasedSubjects,
       pendingPurchasedSubjects: enrollment.pendingPurchasedSubjects,
       paymentStatus: enrollment.paymentStatus 

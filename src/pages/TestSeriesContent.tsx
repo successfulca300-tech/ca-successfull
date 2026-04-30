@@ -102,11 +102,14 @@ const TestSeriesContent = () => {
 
         // Check enrollment
         let enrollment = null;
+        let hasActiveEnrollment = false;
+        let accessExpired = false;
         try {
           const check: any = await enrollmentsAPI.checkEnrollment({ testSeriesId: id });
           console.log('[TestSeriesContent] checkEnrollment response:', check);
           enrollment = check?.enrollment || null;
-          setEnrolled(!!enrollment);
+          hasActiveEnrollment = !!check?.enrolled;
+          setEnrolled(hasActiveEnrollment);
           // Store purchased subjects if available
           if (enrollment?.purchasedSubjects && enrollment.purchasedSubjects.length > 0) {
             console.log('[TestSeriesContent] Setting purchasedSubjects:', enrollment.purchasedSubjects);
@@ -114,12 +117,21 @@ const TestSeriesContent = () => {
           } else {
             console.log('[TestSeriesContent] No purchasedSubjects found in enrollment');
           }
+
+          if (check?.isExpired) {
+            accessExpired = true;
+            toast.error('Your test series access has expired for this attempt. Buy again for the next attempt.');
+          }
         } catch (err) {
           console.log('[TestSeriesContent] checkEnrollment error:', err);
           setEnrolled(false);
         }
 
-        if (!enrollment) {
+        if (!hasActiveEnrollment) {
+          if (!accessExpired) {
+            toast.error('Your test series access has expired for this attempt. Buy again for the next attempt.');
+          }
+          navigate(`/testseries/${id}`);
           setLoading(false);
           return;
         }
@@ -793,7 +805,7 @@ const TestSeriesContent = () => {
           <h2 className="text-2xl font-semibold mb-4">You are not enrolled</h2>
           <p className="text-muted-foreground mb-6">Please purchase or enroll to access tests and materials.</p>
           <div className="max-w-xs mx-auto">
-            <Button onClick={() => navigate(`/testseries/${id}/enroll`)} className="w-full btn-primary">Purchase / Attempt</Button>
+            <Button onClick={() => navigate(`/testseries/${id}`)} className="w-full btn-primary">Purchase / Attempt</Button>
           </div>
         </div>
       </Layout>

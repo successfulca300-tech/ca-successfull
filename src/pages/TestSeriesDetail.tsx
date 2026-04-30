@@ -4,6 +4,7 @@ import Layout from "@/components/layout/Layout";
 import { testSeriesAPI, enrollmentsAPI, offersAPI } from "@/lib/api";
 import { getFixedSeriesById } from '@/data/fixedTestSeries';
 import { openRazorpay } from '@/utils/razorpay';
+import { getAttemptExpiryDate, getUpcomingAttempts, normalizeAttemptLabel } from '@/utils/testSeriesAttempts';
 import { Calendar, CheckCircle, ShoppingCart, Download, Play, FileText, AlertCircle, Image as ImageIcon, Upload, Truck, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +39,7 @@ const TestSeriesDetail = () => {
   const [selectedSeries, setSelectedSeries] = useState<string[]>([]); // 'series1', 'series2', 'series3'
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedAttempt, setSelectedAttempt] = useState('');
   const [computedPrice, setComputedPrice] = useState<number | null>(null);
   const [basePrice, setBasePrice] = useState<number>(0);
   const [totalPapers, setTotalPapers] = useState<number>(0);
@@ -114,7 +116,7 @@ const TestSeriesDetail = () => {
         if (userObj) {
           try {
             const checkRes = await enrollmentsAPI.checkEnrollment({ testSeriesId: id! });
-            setIsEnrolled(!!(checkRes as any).enrollment);
+            setIsEnrolled(!!(checkRes as any).enrolled);
           } catch (enrollErr) {
             setIsEnrolled(false);
           }
@@ -128,13 +130,14 @@ const TestSeriesDetail = () => {
     };
 
     if (id) fetchSeries();
-  }, [id]);
+  }, [id, userObj]);
 
   // Initialize selections
   useEffect(() => {
     if (!baseSeries) return;
     setSelectedGroup(baseSeries.group || null);
     setSelectedSubjects(Array.isArray(baseSeries.subjects) ? [...baseSeries.subjects] : []);
+    setSelectedAttempt('');
     // Initialize selectedSeries for S1 only
     if (baseSeries.seriesType === 'S1') {
       setSelectedSeries([]);
@@ -143,6 +146,8 @@ const TestSeriesDetail = () => {
 
   // Detect if this is CA Inter or CA Final
   const isCAInter = id?.startsWith('inter-') || false;
+  const examLevel = baseSeries?.examLevel || (isCAInter ? 'inter' : 'final');
+  const availableAttempts = getUpcomingAttempts(examLevel);
 
   // Determine how many series this S1 has (managed override > base data > defaults)
   const getSeriesCount = () => {
@@ -428,14 +433,14 @@ By enrolling in the test series, students are agree to our terms and conditions.
     try {
       const res = await offersAPI.validateCoupon(code);
       if (res.valid) {
-        const { code: offerCode, discountType, discountValue, title } = res.offer;
+        const offer = res.offer;
         setAppliedDiscount({
-          code: offerCode,
-          type: discountType === 'percentage' ? 'percent' : 'flat',
-          value: discountValue,
-          label: title,
+          code: offer.code,
+          type: offer.discountType === 'percentage' ? 'percent' : 'flat',
+          value: offer.discountValue,
+          label: offer.title,
         });
-        toast.success(`${title} applied`);
+        toast.success(`${offer.title} applied`);
       } else {
         setAppliedDiscount(null);
         toast.error('Invalid discount code');
@@ -464,14 +469,31 @@ By enrolling in the test series, students are agree to our terms and conditions.
         purchasedSubjectsToSend = selectedSeries.flatMap(series => selectedSubjects.map(subject => `${series}-${subject}`));
       }
 
+      if (!selectedAttempt) {
+        toast.error('Please select your attempt to continue.');
+        return;
+      }
+
+      if (computedPrice == null) {
+        toast.error('Price calculation error. Please try again.');
+        return;
+      }
+
       // Save purchase details with selected series, group, subjects and deadline
+      const normalizedAttempt = normalizeAttemptLabel(selectedAttempt);
+      if (!normalizedAttempt) {
+        toast.error('Please select a valid attempt.');
+        return;
+      }
+      const attemptExpiry = getAttemptExpiryDate(normalizedAttempt);
       const purchaseData = {
         testSeriesId: id,
         selectedSeries, // 'series1', 'series2', 'series3'
         selectedGroup,
         selectedSubjects,
+        testSeriesAttempt: normalizedAttempt,
         purchaseDate: new Date().toISOString(),
-        deadline: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(), // 60 days from now
+        deadline: attemptExpiry?.toISOString() || null,
       };
 
       // Save to localStorage for access control
@@ -480,20 +502,20 @@ By enrolling in the test series, students are agree to our terms and conditions.
       purchases[userObj.id].push(purchaseData);
       localStorage.setItem('testSeriesPurchases', JSON.stringify(purchases));
 
-      if (computedPrice == null) {
-        toast.error('Price calculation error. Please try again.');
-        return;
-      } else if (computedPrice === 0) {
+      if (computedPrice === 0) {
         await enrollmentsAPI.create({
           testSeriesId: id,
           paymentStatus: 'paid',
-          purchasedSubjects: purchasedSubjectsToSend
+          purchasedSubjects: purchasedSubjectsToSend,
+          testSeriesAttempt: normalizedAttempt,
         });
         toast.success('Test series added to your dashboard!');
         navigate('/dashboard?tab=test-series');
         return;
       } else if (computedPrice > 0) {
-        await openRazorpay('testseries', baseSeries, computedPrice, purchasedSubjectsToSend);
+        await openRazorpay('testseries', baseSeries, computedPrice, purchasedSubjectsToSend, {
+          testSeriesAttempt: normalizedAttempt,
+        });
       } else {
         toast.error('Invalid price. Please check your selections.');
         return;
@@ -794,7 +816,6 @@ By enrolling in the test series, students are agree to our terms and conditions.
                 </div>
               </div>
 
-
             </div>
 
             {/* Live Summary */}
@@ -816,6 +837,10 @@ By enrolling in the test series, students are agree to our terms and conditions.
                 <div>
                   <p className="text-muted-foreground">Selected Subjects</p>
                   <p className="font-semibold">{selectedSubjects.length > 0 ? selectedSubjects.join(', ') : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Attempt</p>
+                  <p className="font-semibold">{selectedAttempt || 'â€”'}</p>
                 </div>
                 {totalPapers > 0 && (
                   <div>
@@ -864,7 +889,27 @@ By enrolling in the test series, students are agree to our terms and conditions.
                     <span className="text-primary">₹{(computedPrice ?? 0).toLocaleString()}</span>
                   </div>
 
-                  {/* Discount Code moved here (between Final Price and Buy Now) */}
+                  <div className="pt-3">
+                    <label className="block text-sm font-semibold mb-2">
+                      Attempt <span className="text-red-600">*</span>
+                    </label>
+                    <div className="flex gap-2 flex-wrap">
+                      {availableAttempts.map((attempt) => (
+                        <button
+                          key={attempt}
+                          onClick={() => setSelectedAttempt(attempt)}
+                          className={`px-3 py-2 rounded-lg border-2 text-sm font-medium transition ${
+                            selectedAttempt === attempt
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border bg-card hover:border-primary/50'
+                          }`}
+                        >
+                          {attempt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="pt-3">
                     <label className="block text-sm font-semibold mb-2">Discount Code</label>
                     <div className="flex gap-2">
@@ -893,7 +938,7 @@ By enrolling in the test series, students are agree to our terms and conditions.
                 </div>
 
                 {/* Action Button */}
-                {!isEnrolled && (showSeriesSelection ? selectedSeries.length > 0 : true) && selectedGroup && selectedSubjects.length > 0 ? (
+                {!isEnrolled && (showSeriesSelection ? selectedSeries.length > 0 : true) && selectedGroup && selectedSubjects.length > 0 && selectedAttempt ? (
                   <Button
                     onClick={handleEnroll}
                     className="w-full mt-4 py-3 text-base font-semibold gap-2"

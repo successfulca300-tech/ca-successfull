@@ -22,7 +22,7 @@ const router = express.Router();
 const updateUserValidation = [
   body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
   body('email').optional().isEmail().withMessage('Please provide a valid email'),
-  body('role').optional().isIn(['user', 'admin']).withMessage('Invalid role'),
+  body('role').optional().isIn(['user', 'admin', 'subadmin', 'teacher']).withMessage('Invalid role'),
 ];
 
 // User profile routes (protected, available to all users)

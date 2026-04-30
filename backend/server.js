@@ -28,6 +28,7 @@ import settingsRoutes from './routes/settingsRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import testSeriesMediaRoutes from './routes/testSeriesMediaRoutes.js';
 import testSeriesAnswerRoutes from './routes/testSeriesAnswerRoutes.js';
+import copyRequestRoutes from './routes/copyRequestRoutes.js';
 
 // Load env
 dotenv.config();
@@ -115,9 +116,14 @@ app.use((req, res, next) => {
     return next();
   }
   // Skip express-fileupload for test series answer upload routes (which use multer)
-  if (req.originalUrl.includes('/api/testseries/answers/') && (req.originalUrl.includes('/upload') || req.originalUrl.includes('/evaluated')) && req.method === 'POST') {
-    console.log('[Middleware] Skipping express-fileupload for answer upload route');
-    return next();
+  // This includes: /upload, /evaluated, /teacher-evaluated
+  if (req.originalUrl.includes('/api/testseries/answers/') && req.method === 'POST') {
+    if (req.originalUrl.includes('/upload') || 
+        req.originalUrl.includes('/evaluated') || 
+        req.originalUrl.includes('/teacher-evaluated')) {
+      console.log('[Middleware] Skipping express-fileupload for answer upload route:', req.originalUrl);
+      return next();
+    }
   }
 
   // Apply express-fileupload for all other routes
@@ -156,6 +162,7 @@ app.use('/api/order-requests', orderRequestRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/copy-requests', copyRequestRoutes);
 
 // Serve local uploaded files when Appwrite is not configured or when fallbacks are used
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

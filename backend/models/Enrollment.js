@@ -58,8 +58,12 @@ const enrollmentSchema = new mongoose.Schema(
       default: Date.now,
     },
     expiryDate: {
-      type: Date, // Set to 60 days from purchase for test series
+      type: Date, // For test series, set to selected attempt month end
       required: false,
+    },
+    testSeriesAttempt: {
+      type: String,
+      trim: true,
     },
     completionDate: Date,
     progress: {

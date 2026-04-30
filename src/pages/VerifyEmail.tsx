@@ -63,6 +63,8 @@ const VerifyEmail = () => {
           navigate('/admin');
         } else if (data.user.role === 'subadmin') {
           navigate('/subadmin');
+        } else if (data.user.role === 'teacher') {
+          navigate('/teacher');
         } else {
           navigate('/dashboard');
         }

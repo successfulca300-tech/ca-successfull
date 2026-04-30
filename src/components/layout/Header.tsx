@@ -78,6 +78,8 @@ const Header = () => {
         return '/admin';
       case 'subadmin':
         return '/subadmin';
+      case 'teacher':
+        return '/teacher';
       default:
         return '/dashboard';
     }
@@ -89,6 +91,8 @@ const Header = () => {
         return 'Admin Panel';
       case 'subadmin':
         return 'SubAdmin Panel';
+      case 'teacher':
+        return 'Teacher Dashboard';
       default:
         return 'Dashboard';
     }

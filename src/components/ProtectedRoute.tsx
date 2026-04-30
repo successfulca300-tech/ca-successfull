@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  requiredRole?: 'user' | 'admin' | 'subadmin';
+  requiredRole?: 'user' | 'admin' | 'subadmin' | 'teacher';
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {

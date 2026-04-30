@@ -70,6 +70,21 @@ const testSeriesAnswerSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Teacher assignment
+    assignedToTeacher: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    assignedAt: {
+      type: Date,
+      default: null,
+    },
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   {
     timestamps: true,

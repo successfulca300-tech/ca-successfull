@@ -30,6 +30,7 @@ import Cart from "./pages/Cart";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import SubAdminDashboard from "./pages/SubAdminDashboard";
+import TeacherDashboard from "./pages/TeacherDashboard";
 import CoursesManager from "./pages/admin/CoursesManager";
 import CreateCourse from "./pages/admin/CreateCourse";
 import EditCourse from "./pages/admin/EditCourse";
@@ -96,6 +97,7 @@ const App = () => (
           <Route path="/subadmin" element={<ProtectedRoute requiredRole="subadmin"><SubAdminDashboard /></ProtectedRoute>} />
           <Route path="/subadmin/test-series" element={<ProtectedRoute requiredRole="subadmin"><SubadminTestSeries /></ProtectedRoute>} />
           <Route path="/subadmin/test-series/inter" element={<ProtectedRoute requiredRole="subadmin"><SubadminTestSeriesInter /></ProtectedRoute>} />
+          <Route path="/teacher" element={<ProtectedRoute requiredRole="teacher"><TeacherDashboard /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TooltipProvider>

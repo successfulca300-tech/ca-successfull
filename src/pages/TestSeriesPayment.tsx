@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { testSeriesAPI } from "@/lib/api";
+import { getUpcomingAttempts } from "@/utils/testSeriesAttempts";
 
 const TestSeriesPayment = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,6 +13,8 @@ const TestSeriesPayment = () => {
   const [series, setSeries] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedAttempt, setSelectedAttempt] = useState('');
+  const attempts = getUpcomingAttempts(series?.examLevel || (String(series?._id || '').startsWith('inter-') ? 'inter' : 'final'));
 
   useEffect(() => {
     const fetch = async () => {
@@ -33,10 +36,14 @@ const TestSeriesPayment = () => {
 
   const handleCompletePurchase = async () => {
     if (!series) return;
+    if (!selectedAttempt) {
+      toast.error('Please select your attempt to continue');
+      return;
+    }
     try {
       setSubmitting(true);
       const { openRazorpay } = await import('@/utils/razorpay');
-      await openRazorpay('testseries', series);
+      await openRazorpay('testseries', series, undefined, undefined, { testSeriesAttempt: selectedAttempt });
       toast.success('Purchase initiated');
       navigate('/dashboard?tab=test-series');
     } catch (err: any) {
@@ -76,7 +83,23 @@ const TestSeriesPayment = () => {
           <p className="text-2xl font-bold">₨{series.price?.toLocaleString() || '0'}</p>
         </div>
 
-        <Button className="btn-primary" onClick={handleCompletePurchase} disabled={submitting}>
+        <div className="bg-card p-6 rounded-lg mb-6">
+          <p className="text-muted-foreground mb-3">Attempt *</p>
+          <div className="flex gap-2 flex-wrap">
+            {attempts.map((attempt) => (
+              <Button
+                key={attempt}
+                type="button"
+                variant={selectedAttempt === attempt ? 'default' : 'outline'}
+                onClick={() => setSelectedAttempt(attempt)}
+              >
+                {attempt}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Button className="btn-primary" onClick={handleCompletePurchase} disabled={submitting || !selectedAttempt}>
           {submitting ? <><Loader2 className="animate-spin mr-2" /> Processing...</> : 'Complete Purchase'}
         </Button>
       </div>

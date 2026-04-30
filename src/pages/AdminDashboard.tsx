@@ -15,9 +15,9 @@ import {
 } from "@/components/ui/select";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { dashboardAPI, offersAPI, categoriesAPI, coursesAPI, resourcesAPI, publishRequestAPI, usersAPI, testimonialsAPI, settingsAPI } from "@/lib/api";
+import { dashboardAPI, offersAPI, categoriesAPI, coursesAPI, resourcesAPI, publishRequestAPI, usersAPI, testimonialsAPI, settingsAPI, copyRequestAPI } from "@/lib/api";
 import { toast } from "sonner";
-import { LayoutDashboard, Megaphone, FolderPlus, BookOpen, Users, FileCheck, MessageSquare, Settings, LogOut, Plus, Trash2, Edit, Eye, Check, X, File, Video, CheckCircle, XCircle, AlertCircle, Send, Upload, FileText, IndianRupee, Download } from "lucide-react";
+import { LayoutDashboard, Megaphone, FolderPlus, BookOpen, Users, FileCheck, MessageSquare, Settings, LogOut, Plus, Trash2, Edit, Eye, Check, X, File, Video, CheckCircle, XCircle, AlertCircle, Send, Upload, FileText, IndianRupee, Download, Star, AlertTriangle, Trash, Users2, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 
@@ -81,6 +81,20 @@ const AdminDashboard = () => {
   const [viewResourceDialogOpen, setViewResourceDialogOpen] = useState(false);
   const [selectedResource, setSelectedResource] = useState<any>(null);
 
+  // Teacher Management state
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [teachersLoading, setTeachersLoading] = useState(false);
+  const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
+  const [teacherEditDialogOpen, setTeacherEditDialogOpen] = useState(false);
+  const [teacherRating, setTeacherRating] = useState(0);
+  const [teacherFeedback, setTeacherFeedback] = useState('');
+  const [teacherWarnings, setTeacherWarnings] = useState<any[]>([]);
+  const [newWarningMessage, setNewWarningMessage] = useState('');
+  const [warningType, setWarningType] = useState('performance');
+  const [savingTeacher, setSavingTeacher] = useState(false);
+  const [teacherEvaluations, setTeacherEvaluations] = useState<any[]>([]);
+  const [evaluationsLoading, setEvaluationsLoading] = useState(false);
+
   const menuItems = [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "offers", label: "Manage Offers", icon: Megaphone },
@@ -90,6 +104,7 @@ const AdminDashboard = () => {
     { id: "user-list", label: "User Status", icon: Users },
     { id: "publish-requests", label: "Publish Requests", icon: FileCheck },
     { id: "testimonials", label: "Testimonials", icon: MessageSquare },
+    { id: "teachers", label: "Teacher Management", icon: Users2 },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
@@ -180,6 +195,120 @@ const AdminDashboard = () => {
       fetchSettings();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "teachers") {
+      fetchTeachers();
+    }
+  }, [activeTab]);
+
+  const fetchTeachers = async () => {
+    setTeachersLoading(true);
+    try {
+      console.log('Fetching teachers...');
+      const res: any = await copyRequestAPI.getTeacherStats();
+      console.log('Teachers response:', res);
+      
+      // Handle response - check both success flag and teachers array
+      if (res && (res.success === undefined || res.success === true)) {
+        const teachersList = res.teachers || res.data || [];
+        console.log('Setting teachers:', teachersList);
+        setTeachers(teachersList);
+        if (teachersList.length === 0) {
+          console.warn('No teachers found in response');
+        }
+      } else {
+        console.error('Failed to fetch teachers:', res?.message);
+        toast.error(res?.message || 'Failed to load teachers');
+      }
+    } catch (err: any) {
+      console.error('Error fetching teachers:', err);
+      toast.error(err.message || 'Failed to load teachers');
+    } finally {
+      setTeachersLoading(false);
+    }
+  };
+
+  const handleEditTeacher = (teacher: any) => {
+    setSelectedTeacher(teacher);
+    setTeacherRating(teacher.teacherProfile?.rating || 0);
+    setTeacherFeedback(teacher.teacherProfile?.feedback || '');
+    setTeacherWarnings(teacher.teacherProfile?.warnings || []);
+    setTeacherEditDialogOpen(true);
+    fetchTeacherEvaluations(teacher._id);
+  };
+
+  const fetchTeacherEvaluations = async (teacherId: string) => {
+    setEvaluationsLoading(true);
+    try {
+      console.log('Fetching evaluations for teacher:', teacherId);
+      const res: any = await copyRequestAPI.getTeacherEvaluations(teacherId);
+      console.log('Evaluations response:', res);
+      
+      if (res && (res.success === undefined || res.success === true)) {
+        const evaluationsList = res.evaluations || [];
+        console.log('Setting evaluations:', evaluationsList);
+        setTeacherEvaluations(evaluationsList);
+      } else {
+        console.warn('No evaluations data returned');
+        setTeacherEvaluations([]);
+      }
+    } catch (err: any) {
+      console.error('Error fetching evaluations:', err);
+      setTeacherEvaluations([]);
+    } finally {
+      setEvaluationsLoading(false);
+    }
+  };
+
+  const handleSaveTeacherRating = async () => {
+    if (!selectedTeacher) return;
+
+    setSavingTeacher(true);
+    try {
+      console.log('Saving teacher rating...');
+      const res: any = await copyRequestAPI.updateTeacherRating(
+        selectedTeacher._id,
+        teacherRating,
+        teacherFeedback,
+        teacherWarnings
+      );
+      console.log('Update response:', res);
+      
+      if (res && (res.success === undefined || res.success === true)) {
+        toast.success('Teacher profile updated successfully');
+        setTeacherEditDialogOpen(false);
+        fetchTeachers();
+      } else {
+        toast.error(res?.message || 'Failed to update teacher');
+      }
+    } catch (err: any) {
+      console.error('Error updating teacher:', err);
+      toast.error(err.message || 'Failed to update teacher');
+    } finally {
+      setSavingTeacher(false);
+    }
+  };
+
+  const handleAddWarning = () => {
+    if (!newWarningMessage.trim()) {
+      toast.error('Please enter a warning message');
+      return;
+    }
+
+    const newWarning = {
+      type: warningType,
+      message: newWarningMessage,
+      issuedAt: new Date().toISOString(),
+    };
+
+    setTeacherWarnings([...teacherWarnings, newWarning]);
+    setNewWarningMessage('');
+  };
+
+  const handleRemoveWarning = (index: number) => {
+    setTeacherWarnings(teacherWarnings.filter((_, i) => i !== index));
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -1149,6 +1278,125 @@ const AdminDashboard = () => {
                 </div>
               )}
 
+              {/* Teacher Management */}
+              {activeTab === "teachers" && (
+                <div className="bg-card p-6 rounded-xl shadow-lg border border-border">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold">Teacher Management</h2>
+                    <Button onClick={fetchTeachers} variant="outline">
+                      Refresh
+                    </Button>
+                  </div>
+
+                  {teachersLoading ? (
+                    <div className="text-center py-12">
+                      <Loader2 className="mx-auto animate-spin text-muted-foreground mb-4" size={48} />
+                      <p className="text-muted-foreground">Loading teachers...</p>
+                    </div>
+                  ) : teachers.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Users size={48} className="mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">No teachers available</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {teachers.map((teacher: any) => (
+                        <div key={teacher._id} className="border border-border rounded-lg p-5 hover:shadow-md transition-shadow">
+                          {/* Header */}
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-1">
+                                <h3 className="font-semibold text-lg">{teacher.name}</h3>
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+                                  {teacher.role}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{teacher.email}</p>
+                              {teacher.phone && (
+                                <p className="text-sm text-muted-foreground">{teacher.phone}</p>
+                              )}
+                            </div>
+                            <Button 
+                              onClick={() => handleEditTeacher(teacher)}
+                              className="gap-2"
+                            >
+                              <Edit size={16} />
+                              Edit Profile
+                            </Button>
+                          </div>
+
+                          {/* Rating Section */}
+                          <div className="mb-4 pb-4 border-b border-border">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Star size={18} className="text-yellow-500 fill-yellow-500" />
+                              <span className="font-semibold text-lg">{teacher.teacherProfile?.rating || 0}/5</span>
+                              <span className="text-xs text-muted-foreground">
+                                ({teacher.teacherProfile?.rating ? 'Rated' : 'Not Rated'})
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Stats Grid */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <div className="bg-blue-50 p-3 rounded-lg">
+                              <p className="text-xs text-muted-foreground">Total Requested</p>
+                              <p className="font-bold text-lg text-blue-700">{teacher.teacherProfile?.totalCopiesRequested || 0}</p>
+                            </div>
+                            <div className="bg-green-50 p-3 rounded-lg">
+                              <p className="text-xs text-muted-foreground">Total Approved</p>
+                              <p className="font-bold text-lg text-green-700">{teacher.teacherProfile?.totalCopiesApproved || 0}</p>
+                            </div>
+                            <div className="bg-purple-50 p-3 rounded-lg">
+                              <p className="text-xs text-muted-foreground">Total Evaluated</p>
+                              <p className="font-bold text-lg text-purple-700">{teacher.teacherProfile?.totalCopiesEvaluated || 0}</p>
+                            </div>
+                            <div className="bg-orange-50 p-3 rounded-lg">
+                              <p className="text-xs text-muted-foreground">Avg Eval Time</p>
+                              <p className="font-bold text-lg text-orange-700">{teacher.teacherProfile?.averageEvaluationTime || 0}h</p>
+                            </div>
+                          </div>
+
+                          {/* Feedback */}
+                          {teacher.teacherProfile?.feedback && (
+                            <div className="mb-4 pb-4 border-b border-border bg-blue-50 p-3 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <MessageSquare size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm text-blue-900 mb-1">Admin Feedback</p>
+                                  <p className="text-sm text-blue-800">{teacher.teacherProfile.feedback}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Warnings */}
+                          {teacher.teacherProfile?.warnings && teacher.teacherProfile.warnings.length > 0 && (
+                            <div className="bg-red-50 p-3 rounded-lg">
+                              <div className="flex items-center gap-2 mb-3">
+                                <AlertTriangle size={16} className="text-red-600" />
+                                <p className="font-medium text-sm text-red-900">
+                                  Warnings ({teacher.teacherProfile.warnings.length})
+                                </p>
+                              </div>
+                              <div className="space-y-2">
+                                {teacher.teacherProfile.warnings.map((warning: any, idx: number) => (
+                                  <div key={idx} className="text-sm bg-white border border-red-200 p-2 rounded flex items-start justify-between">
+                                    <div>
+                                      <p className="font-medium text-red-900 capitalize">{warning.type}</p>
+                                      <p className="text-red-800 text-xs">{warning.message}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Settings */}
               {activeTab === "settings" && (
                 <div className="bg-card p-6 rounded-xl shadow-lg border border-border">
@@ -1424,6 +1672,7 @@ const AdminDashboard = () => {
               <Label>Role</Label>
               <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="mt-2 block w-full p-2 border rounded">
                 <option value="user">User</option>
+                <option value="teacher">Teacher</option>
                 <option value="subadmin">Sub-Admin</option>
                 <option value="admin">Admin</option>
               </select>
@@ -1706,6 +1955,208 @@ const AdminDashboard = () => {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Teacher Edit Dialog */}
+      <Dialog open={teacherEditDialogOpen} onOpenChange={setTeacherEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit size={20} />
+              Edit Teacher Profile: {selectedTeacher?.name}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 mt-4">
+            {/* Rating Section */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Star size={18} className="text-yellow-500" />
+                <Label className="text-base font-semibold">Performance Rating</Label>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setTeacherRating(star)}
+                      className={`text-3xl transition-colors ${
+                        star <= teacherRating ? 'text-yellow-500' : 'text-gray-300'
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <span className="text-lg font-semibold">{teacherRating}/5</span>
+              </div>
+            </div>
+
+            {/* Feedback Section */}
+            <div>
+              <Label className="text-base font-semibold flex items-center gap-2 mb-2">
+                <MessageSquare size={18} />
+                Admin Feedback
+              </Label>
+              <Textarea
+                value={teacherFeedback}
+                onChange={(e) => setTeacherFeedback(e.target.value)}
+                placeholder="Enter feedback for this teacher..."
+                className="min-h-[100px]"
+              />
+            </div>
+
+            {/* Warnings Section */}
+            <div>
+              <Label className="text-base font-semibold flex items-center gap-2 mb-3">
+                <AlertTriangle size={18} className="text-red-600" />
+                Warnings & Issues
+              </Label>
+
+              {/* Add Warning Form */}
+              <div className="mb-4 p-4 border border-border rounded-lg bg-red-50">
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm">Warning Type</Label>
+                    <Select value={warningType} onValueChange={setWarningType}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="performance">Performance Issue</SelectItem>
+                        <SelectItem value="conduct">Conduct Issue</SelectItem>
+                        <SelectItem value="quality">Quality Issue</SelectItem>
+                        <SelectItem value="compliance">Compliance Issue</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm">Warning Message</Label>
+                    <Textarea
+                      value={newWarningMessage}
+                      onChange={(e) => setNewWarningMessage(e.target.value)}
+                      placeholder="Describe the issue..."
+                      className="mt-1 min-h-[70px]"
+                    />
+                  </div>
+
+                  <Button 
+                    onClick={handleAddWarning} 
+                    className="w-full"
+                    variant="destructive"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Add Warning
+                  </Button>
+                </div>
+              </div>
+
+              {/* Warnings List */}
+              {teacherWarnings.length > 0 && (
+                <div className="space-y-2">
+                  {teacherWarnings.map((warning, idx) => (
+                    <div key={idx} className="flex items-start gap-3 p-3 bg-red-100 border border-red-300 rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-semibold text-red-900 capitalize text-sm">{warning.type}</p>
+                        <p className="text-sm text-red-800">{warning.message}</p>
+                        <p className="text-xs text-red-700 mt-1">
+                          {new Date(warning.issuedAt).toLocaleDateString('en-IN')}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-200"
+                        onClick={() => handleRemoveWarning(idx)}
+                      >
+                        <Trash size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {teacherWarnings.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">No warnings issued</p>
+              )}
+            </div>
+
+            {/* Evaluations History Section */}
+            <div>
+              <Label className="text-base font-semibold flex items-center gap-2 mb-3">
+                <FileText size={18} className="text-blue-600" />
+                Evaluation History
+              </Label>
+
+              {evaluationsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="animate-spin text-muted-foreground mr-2" size={20} />
+                  <p className="text-muted-foreground">Loading evaluations...</p>
+                </div>
+              ) : teacherEvaluations.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic py-4">No evaluations yet</p>
+              ) : (
+                <div className="space-y-3 max-h-[300px] overflow-y-auto border border-border rounded-lg p-3 bg-blue-50">
+                  {teacherEvaluations.map((evaluation: any, idx: number) => (
+                    <div key={idx} className="border border-blue-200 rounded-lg p-3 bg-white">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">{evaluation.userId?.name || 'Unknown Student'}</p>
+                          <p className="text-xs text-muted-foreground">{evaluation.userId?.email}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-lg text-blue-600">
+                            {evaluation.marksObtained || 0}/{evaluation.maxMarks || 100}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{evaluation.percentage || 0}%</p>
+                        </div>
+                      </div>
+
+                      <div className="mb-2">
+                        <p className="text-xs font-semibold text-gray-600 mb-1">Paper: {evaluation.paperId?.subject} - {evaluation.paperId?.group}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {evaluation.testSeriesId?.name}
+                        </p>
+                      </div>
+
+                      {evaluation.evaluatorComments && (
+                        <div className="mb-2">
+                          <p className="text-xs font-semibold text-gray-600">Remarks:</p>
+                          <p className="text-xs text-gray-700 italic">{evaluation.evaluatorComments}</p>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground">
+                        Evaluated: {new Date(evaluation.evaluatedAt).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 justify-end pt-4 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={() => setTeacherEditDialogOpen(false)}
+                disabled={savingTeacher}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveTeacherRating}
+                disabled={savingTeacher}
+                className="gap-2"
+              >
+                {savingTeacher && <Loader2 size={16} className="animate-spin" />}
+                {savingTeacher ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </Layout>

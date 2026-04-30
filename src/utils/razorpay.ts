@@ -1,6 +1,9 @@
 import { apiRequest } from '@/lib/api';
 
 type ResourceType = 'course' | 'testseries' | 'book' | 'mentorship';
+type ExtraPaymentPayload = {
+  testSeriesAttempt?: string;
+};
 
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -26,7 +29,13 @@ function redirectToDashboardTab(resourceType: ResourceType) {
   window.location.href = '/dashboard?tab=courses';
 }
 
-export async function openRazorpay(resourceType: ResourceType, resource: any, amount?: number, selectedSubjectsOrPapers?: string[]) {
+export async function openRazorpay(
+  resourceType: ResourceType,
+  resource: any,
+  amount?: number,
+  selectedSubjectsOrPapers?: string[],
+  extraPayload?: ExtraPaymentPayload
+) {
   if (!resourceType || !resource) throw new Error('Resource type and resource are required');
   await loadRazorpayScript();
 
@@ -45,6 +54,9 @@ export async function openRazorpay(resourceType: ResourceType, resource: any, am
     payload.testSeriesId = id;
     if (selectedSubjectsOrPapers && selectedSubjectsOrPapers.length > 0) {
       payload.purchasedSubjects = selectedSubjectsOrPapers;
+    }
+    if (extraPayload?.testSeriesAttempt) {
+      payload.testSeriesAttempt = extraPayload.testSeriesAttempt;
     }
   }
   if (resourceType === 'book') payload.bookId = id;

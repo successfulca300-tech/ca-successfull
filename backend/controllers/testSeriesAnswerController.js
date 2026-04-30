@@ -1,8 +1,11 @@
 import TestSeriesAnswer from '../models/TestSeriesAnswer.js';
 import TestSeriesPaper from '../models/TestSeriesPaper.js';
 import TestSeries from '../models/TestSeries.js';
+import User from '../models/User.js';
+import Enrollment from '../models/Enrollment.js';
 import { uploadFileToAppwrite, deleteFileFromAppwrite } from '../utils/appwriteFileService.js';
 import mongoose from 'mongoose';
+import { isTestSeriesEnrollmentActive } from '../utils/testSeriesAttempt.js';
 
 const parseConfiguredDeadline = (value) => {
   if (!value) return null;
@@ -129,38 +132,54 @@ export const uploadAnswerSheet = async (req, res) => {
     
     console.log('[AnswerSheet] Using testSeriesId:', actualTestSeriesId);
 
-    // Check if user is enrolled in the test series
-    const Enrollment = (await import('../models/Enrollment.js')).default;
-    
-    // Check enrollment - try multiple formats
-    let enrollment = null;
-    
-    // Try 1: Direct lookup with actualTestSeriesId (might be shorthand or ObjectId)
-    if (mongoose.Types.ObjectId.isValid(actualTestSeriesId)) {
-      enrollment = await Enrollment.findOne({
-        userId: req.user._id,
-        testSeriesId: actualTestSeriesId
-      });
-    }
-    
-    // Try 2: Look up TestSeries by seriesType and use its ObjectId
-    if (!enrollment) {
-      const ts = await TestSeries.findOne({ seriesType: actualTestSeriesId.toUpperCase() });
-      if (ts) {
-        enrollment = await Enrollment.findOne({
-          userId: req.user._id,
-          testSeriesId: ts._id
-        });
-        console.log('[AnswerSheet] Found enrollment via TestSeries lookup');
+    // Check if user has active enrollment in this test series (strict check).
+    const candidateSet = new Set();
+    const addCandidate = (value) => {
+      if (!value) return;
+      const raw = String(value).trim();
+      if (!raw) return;
+      if (mongoose.Types.ObjectId.isValid(raw)) {
+        candidateSet.add(new mongoose.Types.ObjectId(raw));
+      } else {
+        candidateSet.add(raw);
       }
+    };
+
+    addCandidate(actualTestSeriesId);
+    addCandidate(String(actualTestSeriesId || '').toLowerCase());
+    addCandidate(paper?.testSeriesId);
+    addCandidate(testSeries?._id);
+    if (testSeries?.fixedKey) addCandidate(String(testSeries.fixedKey).toLowerCase());
+
+    if (!mongoose.Types.ObjectId.isValid(actualTestSeriesId)) {
+      const seriesType = String(actualTestSeriesId || '').toUpperCase();
+      const tsFromSeries = await TestSeries.findOne({ seriesType }).select('_id fixedKey');
+      if (tsFromSeries?._id) addCandidate(tsFromSeries._id);
+      if (tsFromSeries?.fixedKey) addCandidate(String(tsFromSeries.fixedKey).toLowerCase());
     }
-    
-    // Try 3: If still not found, allow submission anyway (enrollment check is soft)
-    if (!enrollment) {
-      console.warn('[AnswerSheet] WARNING: No enrollment found for UserId:', req.user._id, 'TestSeriesId:', actualTestSeriesId);
-      console.warn('[AnswerSheet] Allowing submission anyway - enrollment check is advisory');
+
+    const enrollmentCandidates = Array.from(candidateSet);
+    const enrollmentQuery = {
+      userId: req.user._id,
+      paymentStatus: 'paid',
+    };
+
+    if (enrollmentCandidates.length > 1) {
+      enrollmentQuery.$or = enrollmentCandidates.map((candidate) => ({ testSeriesId: candidate }));
+    } else if (enrollmentCandidates.length === 1) {
+      enrollmentQuery.testSeriesId = enrollmentCandidates[0];
     } else {
-      console.log('[AnswerSheet] Enrollment verified');
+      enrollmentQuery.testSeriesId = actualTestSeriesId;
+    }
+
+    const paidEnrollments = await Enrollment.find(enrollmentQuery).sort({ createdAt: -1 });
+    const activeEnrollment = paidEnrollments.find((enrollment) => isTestSeriesEnrollmentActive(enrollment));
+
+    if (!activeEnrollment) {
+      return res.status(403).json({
+        success: false,
+        message: 'This test series access has expired for your selected attempt. Buy again for the next attempt.',
+      });
     }
 
     // Check fixed submission deadline from test series configuration (group-wise)
@@ -336,6 +355,52 @@ export const getMyAnswers = async (req, res) => {
       }
     }
 
+    const candidateSet = new Set();
+    const addCandidate = (value) => {
+      if (!value) return;
+      const raw = String(value).trim();
+      if (!raw) return;
+      if (mongoose.Types.ObjectId.isValid(raw)) {
+        candidateSet.add(new mongoose.Types.ObjectId(raw));
+      } else {
+        candidateSet.add(raw);
+      }
+    };
+
+    addCandidate(testSeriesId);
+    addCandidate(String(testSeriesId || '').toLowerCase());
+    addCandidate(queryTestSeriesId);
+
+    if (mongoose.Types.ObjectId.isValid(queryTestSeriesId)) {
+      const tsDoc = await TestSeries.findById(queryTestSeriesId).select('fixedKey');
+      if (tsDoc?.fixedKey) {
+        addCandidate(String(tsDoc.fixedKey).toLowerCase());
+      }
+    }
+
+    const enrollmentCandidates = Array.from(candidateSet);
+    const enrollmentQuery = {
+      userId: req.user._id,
+      paymentStatus: 'paid',
+    };
+
+    if (enrollmentCandidates.length > 1) {
+      enrollmentQuery.$or = enrollmentCandidates.map((candidate) => ({ testSeriesId: candidate }));
+    } else if (enrollmentCandidates.length === 1) {
+      enrollmentQuery.testSeriesId = enrollmentCandidates[0];
+    } else {
+      enrollmentQuery.testSeriesId = queryTestSeriesId;
+    }
+
+    const paidEnrollments = await Enrollment.find(enrollmentQuery).sort({ createdAt: -1 });
+    const hasActiveEnrollment = paidEnrollments.some((enrollment) => isTestSeriesEnrollmentActive(enrollment));
+    if (!hasActiveEnrollment) {
+      return res.status(403).json({
+        success: false,
+        message: 'This test series access has expired for your selected attempt. Buy again for the next attempt.',
+      });
+    }
+
     const query = {
       testSeriesId: queryTestSeriesId,
       userId: req.user._id
@@ -401,6 +466,7 @@ export const getAllAnswerSheets = async (req, res) => {
         }
       })
       .populate('evaluatedBy', 'name')
+      .populate('assignedToTeacher', 'name')
       .sort({ createdAt: -1 });
 
     res.json({
@@ -572,6 +638,26 @@ export const getPaperStatistics = async (req, res) => {
 export const getMyAnswerForPaper = async (req, res) => {
   try {
     const { paperId } = req.params;
+    const paper = await TestSeriesPaper.findById(paperId).select('testSeriesId');
+    if (!paper) {
+      return res.status(404).json({
+        success: false,
+        message: 'Paper not found',
+      });
+    }
+
+    const paidEnrollments = await Enrollment.find({
+      userId: req.user._id,
+      paymentStatus: 'paid',
+      testSeriesId: paper.testSeriesId,
+    });
+    const hasActiveEnrollment = paidEnrollments.some((enrollment) => isTestSeriesEnrollmentActive(enrollment));
+    if (!hasActiveEnrollment) {
+      return res.status(403).json({
+        success: false,
+        message: 'This test series access has expired for your selected attempt. Buy again for the next attempt.',
+      });
+    }
 
     const answer = await TestSeriesAnswer.findOne({
       paperId: paperId,
@@ -593,6 +679,251 @@ export const getMyAnswerForPaper = async (req, res) => {
     });
   } catch (error) {
     console.error('Get my answer for paper error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Assign answer sheet to a teacher (Subadmin)
+// @route   POST /api/testseries/answers/:answerId/assign-teacher
+// @access  Private/SubAdmin
+export const assignAnswerToTeacher = async (req, res) => {
+  try {
+    const { answerId } = req.params;
+    const { teacherId } = req.body;
+
+    if (!teacherId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Teacher ID is required'
+      });
+    }
+
+    const answer = await TestSeriesAnswer.findById(answerId)
+      .populate('paperId')
+      .populate('userId', 'name email');
+
+    if (!answer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Answer not found'
+      });
+    }
+
+    // Verify teacher exists and has teacher role
+    const teacher = await User.findById(teacherId);
+    
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Teacher not found'
+      });
+    }
+
+    if (teacher.role !== 'teacher') {
+      return res.status(400).json({
+        success: false,
+        message: 'User is not a teacher'
+      });
+    }
+
+    // Assign the answer to teacher
+    answer.assignedToTeacher = teacherId;
+    answer.assignedAt = new Date();
+    answer.assignedBy = req.user._id;
+
+    await answer.save();
+
+    res.json({
+      success: true,
+      message: 'Answer assigned to teacher successfully',
+      answer
+    });
+  } catch (error) {
+    console.error('Assign answer to teacher error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get all answer sheets assigned to a teacher
+// @route   GET /api/testseries/answers/teacher/assigned
+// @access  Private/Teacher
+export const getTeacherAssignedAnswers = async (req, res) => {
+  try {
+    const answers = await TestSeriesAnswer.find({
+      assignedToTeacher: req.user._id,
+      isSubmitted: true
+    })
+      .populate('userId', 'name email phone')
+      .populate({
+        path: 'paperId',
+        populate: {
+          path: 'testSeriesId',
+          select: 'title seriesType'
+        }
+      })
+      .populate('evaluatedBy', 'name')
+      .sort({ assignedAt: -1 });
+
+    // For each answer, fetch the suggested answer paper
+    const answersWithSuggested = await Promise.all(
+      answers.map(async (answer) => {
+        const answerObj = answer.toObject ? answer.toObject() : answer;
+        
+        if (answerObj.paperId) {
+          try {
+            // Fetch suggested answer paper with same series/subject/group
+            const suggestedPaper = await TestSeriesPaper.findOne({
+              testSeriesId: answerObj.paperId.testSeriesId._id,
+              subject: answerObj.paperId.subject,
+              group: answerObj.paperId.group,
+              series: answerObj.paperId.series,
+              paperType: 'suggested',
+              status: 'published'
+            }).select('publicFileUrl fileName');
+
+            if (suggestedPaper) {
+              answerObj.suggestedAnswerUrl = suggestedPaper.publicFileUrl;
+            }
+          } catch (err) {
+            console.error('Error fetching suggested answer:', err);
+          }
+        }
+
+        return answerObj;
+      })
+    );
+
+    res.json({
+      success: true,
+      answers: answersWithSuggested
+    });
+  } catch (error) {
+    console.error('Get teacher assigned answers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Upload evaluated sheet for an answer (Teacher)
+// @route   POST /api/testseries/answers/:answerId/teacher-evaluated
+// @access  Private/Teacher
+export const uploadTeacherEvaluatedSheet = async (req, res) => {
+  let uploadedFileId = null;
+
+  try {
+    // Debug logging
+    console.log('[uploadTeacherEvaluatedSheet] Request received');
+    console.log('[uploadTeacherEvaluatedSheet] req.file:', req.file ? `${req.file.originalname} (${req.file.mimetype})` : 'NO FILE');
+    console.log('[uploadTeacherEvaluatedSheet] req.body:', req.body);
+    console.log('[uploadTeacherEvaluatedSheet] req.params:', req.params);
+    
+    if (!req.file) {
+      console.error('[uploadTeacherEvaluatedSheet] ERROR: No file attached to request');
+      console.error('[uploadTeacherEvaluatedSheet] Available keys on req:', Object.keys(req));
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded. Please select a PDF file.'
+      });
+    }
+
+    const { answerId } = req.params;
+    const { marksObtained, maxMarks, evaluatorComments } = req.body;
+
+    // Validate file is PDF
+    if (req.file.mimetype !== 'application/pdf') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only PDF files are allowed'
+      });
+    }
+
+    const answer = await TestSeriesAnswer.findById(answerId)
+      .populate('paperId');
+
+    if (!answer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Answer not found'
+      });
+    }
+
+    // Verify that the teacher is the assigned teacher for this answer
+    if (answer.assignedToTeacher.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not assigned to evaluate this answer'
+      });
+    }
+
+    // Upload evaluated sheet to Appwrite
+    const appwriteResponse = await uploadFileToAppwrite(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+    uploadedFileId = appwriteResponse.fileId;
+
+    // Update answer with evaluation data
+    answer.marksObtained = parseFloat(marksObtained) || 0;
+    answer.maxMarks = parseFloat(maxMarks) || 100;
+    answer.percentage = (answer.marksObtained / answer.maxMarks) * 100;
+    answer.evaluatorComments = evaluatorComments || '';
+    answer.evaluatedAt = new Date();
+    answer.evaluatedBy = req.user._id;
+    answer.isEvaluated = true;
+
+    // Store evaluated sheet info
+    answer.answerSheetFileId = appwriteResponse.fileId;
+    answer.answerSheetAppwriteBucketId = appwriteResponse.bucketId;
+    answer.answerSheetUrl = appwriteResponse.publicFileUrl;
+    answer.answerSheetFileName = req.file.originalname;
+
+    await answer.save();
+
+    res.json({
+      success: true,
+      message: 'Evaluation sheet uploaded successfully',
+      answer
+    });
+  } catch (error) {
+    // Cleanup uploaded file on error
+    if (uploadedFileId) {
+      try {
+        await deleteFileFromAppwrite(uploadedFileId);
+      } catch (deleteError) {
+        console.error('Cleanup failed:', deleteError);
+      }
+    }
+
+    console.error('Upload teacher evaluated sheet error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to upload evaluation sheet'
+    });
+  }
+};
+
+// @desc    Get all teachers for assignment dropdown
+// @route   GET /api/testseries/answers/teachers/list
+// @access  Private/SubAdmin
+export const getTeachersList = async (req, res) => {
+  try {
+    const teachers = await User.find({ role: 'teacher' }).select('_id name email');
+
+    res.json({
+      success: true,
+      teachers
+    });
+  } catch (error) {
+    console.error('Get teachers list error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
