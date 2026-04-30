@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { useNavigate } from "react-router-dom";
 import { authAPI } from "@/lib/api";
 
-type UserRole = 'admin' | 'subadmin' | 'user';
+type UserRole = 'admin' | 'subadmin' | 'teacher' | 'user';
 
 interface User {
   _id: string;
@@ -133,7 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         navigate('/subadmin');
       } else if (role === 'teacher') {
         navigate('/teacher');
-      } else {
+      } else if (role === 'user') {
         navigate('/dashboard');
       }
 
@@ -165,4 +165,3 @@ export const useAuth = () => {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-};
